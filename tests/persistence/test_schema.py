@@ -25,8 +25,9 @@ def test_vector_extension_is_enabled(session: Session) -> None:
 
 
 def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
-    """M0 ships three tables. `memories` and chunks are later milestones, and a
-    stray table here means something was built ahead of its milestone."""
+    """M0 ships four tables. `memories`, `preference_facts`, and content chunks
+    are later milestones, and a stray table here means something was built
+    ahead of its milestone."""
     tables = set(
         session.scalars(
             text(
@@ -36,7 +37,7 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
         ).all()
     )
 
-    assert tables == {"users", "media_items", "media_structure_units"}
+    assert tables == {"users", "media_items", "media_structure_units", "jobs"}
 
 
 def test_ordinal_uniqueness_is_deferrable(session: Session) -> None:
@@ -97,6 +98,27 @@ def test_discriminator_columns_are_constrained_in_the_database(
     # prepends `ck_<table>_` — so the Enum's own `name` is the bare column name.
     assert "ck_media_items_media_type" in checks
     assert "ck_media_structure_units_unit_type" in checks
+    assert "ck_jobs_status" in checks
+
+
+def test_claim_path_indexes_are_partial(session: Session) -> None:
+    """The claim query scans outstanding work, not job history.
+
+    Without the predicates these indexes grow with every job ever run, and the
+    queue slows down permanently as a function of throughput.
+    """
+    rows = session.execute(
+        text(
+            "SELECT indexname, indexdef FROM pg_indexes "
+            "WHERE tablename = 'jobs' AND indexname IN "
+            "('ix_jobs_claimable', 'ix_jobs_expired_leases')"
+        )
+    ).all()
+    predicates = {str(name): str(definition) for name, definition in rows}
+
+    assert len(predicates) == 2
+    assert "WHERE" in predicates["ix_jobs_claimable"]
+    assert "WHERE" in predicates["ix_jobs_expired_leases"]
 
 
 def test_unknown_media_type_is_rejected_by_the_database(session: Session) -> None:

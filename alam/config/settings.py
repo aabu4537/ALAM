@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "ci", "staging", "production"]
@@ -40,13 +40,52 @@ class Settings(BaseSettings):
 
     # --- Job queue ---
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0)
-    worker_batch_size: int = Field(default=1, ge=1)
     job_max_attempts: int = Field(default=5, ge=1)
+
+    drain_max_jobs: int = Field(default=10, ge=1)
+    drain_budget_seconds: float = Field(default=25.0, gt=0)
+    """Wall-clock ceiling for one drain.
+
+    Must stay well under the platform's function limit — 300s on Vercel Hobby
+    with Fluid Compute — so an invocation returns rather than being killed
+    mid-job (ADR-0007).
+    """
+
+    job_lease_seconds: float = Field(default=120.0, gt=0)
+    """How long a claim is held before another worker may take it back.
+
+    Must exceed ``drain_budget_seconds``, or a job can be stolen from a worker
+    still running it. Enforced below.
+    """
+
+    drain_secret: SecretStr | None = None
+    """Bearer token for POST /internal/jobs/drain.
+
+    The endpoint is public. Unset means the endpoint refuses all callers rather
+    than accepting them.
+    """
 
     # --- Providers ---
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"
     stt_provider: ProviderKind = "fake"
+
+    @model_validator(mode="after")
+    def _lease_must_outlive_the_drain(self) -> Settings:
+        """Catch a misconfiguration that would otherwise look like flakiness.
+
+        If the lease is shorter than the drain budget, a long-running job has
+        its lease expire while it is still being worked on, a second worker
+        reclaims it, and the job runs twice. That surfaces as rare duplicate
+        side effects, which is close to impossible to diagnose after the fact.
+        """
+        if self.job_lease_seconds <= self.drain_budget_seconds:
+            raise ValueError(
+                f"job_lease_seconds ({self.job_lease_seconds}) must exceed "
+                f"drain_budget_seconds ({self.drain_budget_seconds}), or a job "
+                f"can be reclaimed while it is still running"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)
