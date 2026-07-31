@@ -40,5 +40,21 @@ class UserRepository:
             select(User).where(User.is_demo.is_(True)).order_by(User.created_at).limit(1)
         ).first()
 
+    def get_owner(self) -> User | None:
+        """The single owner account, if one has been created yet.
+
+        Symmetric with ``get_demo_user`` — a single-user system (CLAUDE.md)
+        should never need a caller-supplied id to find either side of the
+        rule 9 boundary.
+        """
+        return self._session.scalars(
+            select(User).where(User.is_demo.is_(False)).order_by(User.created_at).limit(1)
+        ).first()
+
+    def get_or_create_owner(self, display_name: str) -> User:
+        """Idempotent bootstrap: the owner is created on first use rather than
+        through a dedicated signup flow, since there is exactly one."""
+        return self.get_owner() or self.create(display_name=display_name, is_demo=False)
+
     def delete(self, user: User) -> None:
         self._session.delete(user)
