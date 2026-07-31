@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 
 from alam.api.middleware import TraceIDMiddleware
-from alam.api.routers import health, imports, internal
+from alam.api.routers import books, health, imports, internal
 from alam.config.logging import configure_logging, get_logger
 from alam.config.settings import get_settings
 
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(internal.router)
     app.include_router(imports.router)
+    app.include_router(books.router)
 
     return app
 
