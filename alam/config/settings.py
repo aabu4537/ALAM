@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "ci", "staging", "production"]
@@ -78,6 +78,21 @@ class Settings(BaseSettings):
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"
     stt_provider: ProviderKind = "fake"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_driver(cls, value: str) -> str:
+        """Supabase's dashboard hands out bare ``postgresql://`` connection
+        strings, which makes SQLAlchemy default to psycopg2 — a driver this
+        project doesn't install, since everything is written against psycopg3.
+        Rewriting the scheme here means pasting Supabase's string verbatim
+        just works, instead of failing at connect time with a driver import
+        error that has nothing to do with the actual mistake.
+        """
+        for bare_scheme in ("postgresql://", "postgres://"):
+            if value.startswith(bare_scheme):
+                return "postgresql+psycopg://" + value[len(bare_scheme) :]
+        return value
 
     @model_validator(mode="after")
     def _lease_must_outlive_the_drain(self) -> Settings:
