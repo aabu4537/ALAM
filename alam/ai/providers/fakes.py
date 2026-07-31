@@ -162,6 +162,13 @@ class FakeEmbeddingProvider:
 
 
 @dataclass
+class STTCall:
+    audio: bytes
+    language: str | None
+    entities: tuple[str, ...]
+
+
+@dataclass
 class FakeSpeechToText:
     """Deterministic transcription.
 
@@ -172,14 +179,20 @@ class FakeSpeechToText:
 
     transcripts: list[str] = field(default_factory=list)
     fail_with: Exception | None = None
-    calls: list[bytes] = field(default_factory=list)
+    calls: list[STTCall] = field(default_factory=list)
 
     @property
     def model(self) -> str:
         return FAKE_STT_MODEL
 
-    def transcribe(self, audio: bytes, *, language: str | None = None) -> Transcript:
-        self.calls.append(audio)
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        language: str | None = None,
+        entities: Sequence[str] | None = None,
+    ) -> Transcript:
+        self.calls.append(STTCall(audio=audio, language=language, entities=tuple(entities or ())))
 
         if self.fail_with is not None:
             raise self.fail_with

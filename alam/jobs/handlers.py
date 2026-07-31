@@ -5,16 +5,36 @@ A handler receives an open session and the job's payload, and either returns
 transaction boundary so a partial handler write is rolled back before the
 failure is recorded.
 
-M0 ships one no-op handler. Real handlers arrive with the milestones that need
-them: transcription and extraction at M2, embedding at M3, consolidation at M4.
+M0 shipped one no-op handler. Real handlers arrive with the milestones that
+need them: transcription and correction at M2 session 2, extraction at M2
+session 3, embedding at M3, consolidation at M4. This module is the
+composition root for that wiring — it imports concrete handler functions from
+``services/`` and registers them, the same way ``api/main.py`` wires up
+routers. It can do so without a circular import because job type *constants*
+live in ``jobs/job_types.py``, not here — a service needs to name the job type
+it enqueues, and importing it back from this module would be circular.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
+from alam.jobs.job_types import CORRECT_TRANSCRIPT, NOOP, TRANSCRIBE_CAPTURE
+from alam.services.capture_pipeline import correct_transcript, transcribe_capture
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+__all__ = [
+    "CORRECT_TRANSCRIPT",
+    "NOOP",
+    "TRANSCRIBE_CAPTURE",
+    "JobHandler",
+    "UnknownJobTypeError",
+    "get_handler",
+    "register",
+    "registered_types",
+]
 
 
 class JobHandler(Protocol):
@@ -30,14 +50,6 @@ class UnknownJobTypeError(LookupError):
 
 
 _HANDLERS: dict[str, JobHandler] = {}
-
-NOOP = "noop"
-
-TRANSCRIBE_CAPTURE = "transcribe_capture"
-"""Job type enqueued by ``services.capture_submission``. The handler itself
-arrives in M2 session 2 — until it is registered, a job of this type fails
-with ``UnknownJobTypeError`` and retries out, which is fine for an
-in-progress milestone branch that never reaches production undrained."""
 
 
 def register(job_type: str, handler: JobHandler) -> None:
@@ -68,3 +80,5 @@ def noop_handler(session: Session, payload: dict[str, Any]) -> None:
 
 
 register(NOOP, noop_handler)
+register(TRANSCRIBE_CAPTURE, transcribe_capture)
+register(CORRECT_TRANSCRIPT, correct_transcript)

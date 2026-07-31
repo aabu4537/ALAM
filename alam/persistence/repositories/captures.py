@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from alam.persistence.models.capture import Capture
+from alam.persistence.models.capture import Capture, CaptureStatus
 
 if TYPE_CHECKING:
     import uuid
@@ -46,3 +46,18 @@ class CaptureRepository:
             .where(Capture.media_item_id == media_item_id)
             .order_by(Capture.created_at)
         ).all()
+
+    def mark_transcribed(
+        self, capture: Capture, *, raw_transcript: str, transcript_model: str
+    ) -> Capture:
+        capture.raw_transcript = raw_transcript
+        capture.transcript_model = transcript_model
+        capture.status = CaptureStatus.TRANSCRIBED
+        self._session.flush()
+        return capture
+
+    def mark_corrected(self, capture: Capture, *, corrected_transcript: str) -> Capture:
+        capture.corrected_transcript = corrected_transcript
+        capture.status = CaptureStatus.CORRECTED
+        self._session.flush()
+        return capture

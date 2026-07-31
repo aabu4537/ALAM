@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from alam.domain.reading_progress import compute_progress
-from alam.jobs.handlers import TRANSCRIBE_CAPTURE
+from alam.jobs.job_types import TRANSCRIBE_CAPTURE
 from alam.jobs.queue import JobQueue
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
