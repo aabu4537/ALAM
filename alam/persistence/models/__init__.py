@@ -13,6 +13,7 @@ from alam.persistence.models.media_structure_unit import (
     MediaStructureUnit,
     StructureUnitType,
 )
+from alam.persistence.models.memory import Memory, MemoryType
 from alam.persistence.models.reading_session import ReadingSession, ReadingSessionStatus
 from alam.persistence.models.user import User
 
@@ -25,6 +26,8 @@ __all__ = [
     "MediaItem",
     "MediaStructureUnit",
     "MediaType",
+    "Memory",
+    "MemoryType",
     "ReadingSession",
     "ReadingSessionStatus",
     "StructureUnitType",

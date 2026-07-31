@@ -17,4 +17,8 @@ on success."""
 
 CORRECT_TRANSCRIPT = "correct_transcript"
 """Enqueued by the ``TRANSCRIBE_CAPTURE`` handler once a raw transcript
-exists. Extraction (M2 session 3) is the next stage after this one."""
+exists. Chains to ``EXTRACT_MEMORIES`` on success."""
+
+EXTRACT_MEMORIES = "extract_memories"
+"""Enqueued by the ``CORRECT_TRANSCRIPT`` handler once a corrected transcript
+exists. The last stage of the M2 capture pipeline."""

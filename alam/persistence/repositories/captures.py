@@ -61,3 +61,18 @@ class CaptureRepository:
         capture.status = CaptureStatus.CORRECTED
         self._session.flush()
         return capture
+
+    def mark_extracted(self, capture: Capture) -> Capture:
+        capture.status = CaptureStatus.EXTRACTED
+        self._session.flush()
+        return capture
+
+    def resync_ordinal(self, *, structure_unit_id: uuid.UUID, ordinal: int) -> None:
+        """Repairs the denormalized ordinal after structure re-verification
+        renumbers the unit this capture was recorded at (CLAUDE.md rule 1,
+        ADR-0006). Called from ``services/structure_plan.py``."""
+        for capture in self._session.scalars(
+            select(Capture).where(Capture.structure_unit_id == structure_unit_id)
+        ):
+            capture.structure_ordinal = ordinal
+        self._session.flush()

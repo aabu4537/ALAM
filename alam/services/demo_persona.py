@@ -2,10 +2,12 @@
 demo surface (`GET /demo/books`) has something real to show without touching
 the owner's data (CLAUDE.md rule 9) or costing anything to generate.
 
-M1 scope only. This is the reading-history backbone — books, ratings,
-shelves, dates, and one fully verified chapter structure to demonstrate the
-ADR-0004 pipeline end-to-end. Voice reflections and profile facts don't exist
-yet (M2, M4) and are not part of what this seeds.
+This is the reading-history backbone — books, ratings, shelves, dates, one
+fully verified chapter structure (M1), and one seeded voice reflection
+carried all the way through to extracted memories (M2) — each demonstrating
+its milestone's pipeline end-to-end without a frontend, real audio, or a
+network call. Profile facts don't exist yet (M4) and are not part of what
+this seeds.
 
 Idempotent: safe to call more than once. Matches existing demo books by title
 rather than re-creating them, and never touches a book it didn't create.
@@ -17,8 +19,13 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from alam.ai.extraction.memories import ExtractedMemory, MemoryType
+from alam.domain.reading_progress import compute_progress
 from alam.persistence.models.media_item import MediaType
+from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
+from alam.persistence.repositories.memories import MemoryRepository
+from alam.persistence.repositories.reading_sessions import ReadingSessionRepository
 from alam.persistence.repositories.structure_units import StructureUnitRepository
 from alam.persistence.repositories.users import UserRepository
 
@@ -27,9 +34,22 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session
 
-    from alam.persistence.models import User
+    from alam.persistence.models import MediaStructureUnit, User
 
 DEMO_DISPLAY_NAME = "Demo Reader"
+DEMO_PROMPT_VERSION_ID = "demo-seed"
+"""Not a real prompt version (rule 6 is about LLM outputs; this data was
+never produced by one) — a recognizable sentinel so a seeded memory is never
+mistaken for a genuine extraction in a downstream accuracy count."""
+
+
+@dataclass(frozen=True, slots=True)
+class DemoReflectionSeed:
+    chapter_index: int
+    """0-based index into the book's ``chapters`` tuple."""
+    raw_transcript: str
+    corrected_transcript: str
+    memories: tuple[ExtractedMemory, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +64,10 @@ class DemoBookSeed:
     """Non-empty only for the books meant to demonstrate a fully verified
     structure — most demo books don't need it, mirroring how most real books
     in a library sit unverified until the reader actually opens one."""
+    reflection: DemoReflectionSeed | None = None
+    """Demonstrates the M2 capture -> transcribe -> correct -> extract
+    pipeline for one book, the same way ``chapters`` demonstrates ADR-0004's
+    structure verification. Requires ``chapters`` to be non-empty."""
 
 
 DEMO_LIBRARY: tuple[DemoBookSeed, ...] = (
@@ -55,6 +79,27 @@ DEMO_LIBRARY: tuple[DemoBookSeed, ...] = (
         date_added="2025-08-03",
         date_read="2025-08-20",
         chapters=("Part One: Dune", "Part Two: Muad'Dib", "Part Three: The Prophet"),
+        reflection=DemoReflectionSeed(
+            chapter_index=0,
+            raw_transcript=(
+                "I think the mud dib guy is hiding something big from his mom, "
+                "and honestly the pacing here is so slow."
+            ),
+            corrected_transcript=(
+                "I think Muad'Dib is hiding something big from his mom, "
+                "and honestly the pacing here is so slow."
+            ),
+            memories=(
+                ExtractedMemory(
+                    memory_type=MemoryType.PREDICTION,
+                    content="Paul is concealing something significant from Jessica.",
+                ),
+                ExtractedMemory(
+                    memory_type=MemoryType.OPINION,
+                    content="The pacing in Part One feels slow.",
+                ),
+            ),
+        ),
     ),
     DemoBookSeed(
         title="The Left Hand of Darkness",
@@ -139,6 +184,47 @@ class DemoSeedResult:
     skipped_book_titles: tuple[str, ...]
 
 
+def _seed_reflection(
+    session: Session,
+    *,
+    item_id: uuid.UUID,
+    units: list[MediaStructureUnit],
+    reflection: DemoReflectionSeed,
+) -> None:
+    """Builds a capture already at ``EXTRACTED`` directly, rather than
+    enqueueing jobs for the fake providers to run — seeding must be
+    deterministic and free of any queue-drain timing, and the point is to
+    demonstrate the pipeline's *output*, not re-run it."""
+    unit = units[reflection.chapter_index]
+    progress = compute_progress(unit.ordinal, len(units))
+
+    reading_session = ReadingSessionRepository(session).get_or_create_active(
+        item_id, structure_unit_id=unit.id, ordinal=unit.ordinal, progress=progress
+    )
+    capture = CaptureRepository(session).create(
+        reading_session_id=reading_session.id,
+        media_item_id=item_id,
+        structure_unit_id=unit.id,
+        structure_ordinal=unit.ordinal,
+        audio_data=b"",
+    )
+    CaptureRepository(session).mark_transcribed(
+        capture, raw_transcript=reflection.raw_transcript, transcript_model=DEMO_PROMPT_VERSION_ID
+    )
+    CaptureRepository(session).mark_corrected(
+        capture, corrected_transcript=reflection.corrected_transcript
+    )
+    MemoryRepository(session).create_many(
+        capture_id=capture.id,
+        media_item_id=item_id,
+        structure_unit_id=unit.id,
+        structure_ordinal=unit.ordinal,
+        prompt_version_id=DEMO_PROMPT_VERSION_ID,
+        extracted=list(reflection.memories),
+    )
+    CaptureRepository(session).mark_extracted(capture)
+
+
 def seed_demo_persona(session: Session) -> DemoSeedResult:
     user = UserRepository(session).get_or_create_demo(DEMO_DISPLAY_NAME)
 
@@ -166,11 +252,17 @@ def seed_demo_persona(session: Session) -> DemoSeedResult:
             },
         )
 
+        book_units = []
         if seed.chapters:
             units = StructureUnitRepository(session)
-            for ordinal, label in enumerate(seed.chapters, start=1):
+            book_units = [
                 units.create(media_item_id=item.id, ordinal=ordinal, label=label)
+                for ordinal, label in enumerate(seed.chapters, start=1)
+            ]
             items.mark_structure_verified(item, at=dt.datetime.now(dt.UTC))
+
+        if seed.reflection:
+            _seed_reflection(session, item_id=item.id, units=book_units, reflection=seed.reflection)
 
         created.append(seed.title)
 
