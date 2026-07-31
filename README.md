@@ -11,7 +11,7 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 and M1 complete, M2 not started.** Deployed and live at
+> **Status: M0, M1, and M2 complete, M3 not started.** Deployed and live at
 > [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
 > yet (that's M7), but the API is real:
 >
@@ -21,9 +21,10 @@ horizontal scale.
 > ```
 >
 > The second one returns a seeded, invented reading history — the demo persona
-> generator from M1. It is not the owner's real data; that boundary is
-> structural, not a convention (see "Standing constraints" below). The
-> milestone table further down marks what is real. Nothing in this README
+> generator from M1, extended at M2 to carry one book's reflection all the way
+> through to extracted memories. It is not the owner's real data; that
+> boundary is structural, not a convention (see "Standing constraints" below).
+> The milestone table further down marks what is real. Nothing in this README
 > describes behaviour that is not committed.
 
 ---
@@ -32,13 +33,13 @@ horizontal scale.
 
 ```mermaid
 flowchart LR
-    A["🎙️ Voice reflection<br/><i>book + chapter selected<br/>at record time</i>"] --> B[Transcription]
+    A["🎙️ Voice reflection<br/><i>book + chapter selected<br/>at record time</i>"] --> B["Transcription<br/><i>+ entity-biased correction</i>"]
     B --> C["Extraction<br/><i>one capture →<br/>many typed memories</i>"]
     C --> D[("Episodic memory<br/><code>memories</code>")]
-    D --> E["Nightly<br/>consolidation"]
-    E --> F[("Preference profile<br/><code>preference_facts</code>")]
-    D --> G{"Retrieval<br/><i>ordinal-filtered</i>"}
-    F --> H["Synthesis<br/><i>briefings · predictions ·<br/>recommendations</i>"]
+    D --> E["Nightly<br/>consolidation<br/><i>M4</i>"]
+    E --> F[("Preference profile<br/><code>preference_facts</code><br/><i>M4</i>")]
+    D --> G{"Retrieval<br/><i>ordinal-filtered · M3</i>"}
+    F --> H["Synthesis<br/><i>briefings · predictions ·<br/>recommendations · M6</i>"]
     G --> H
 
     style A fill:#1f6feb,color:#fff,stroke:none
@@ -47,10 +48,12 @@ flowchart LR
     style F fill:#8957e5,color:#fff,stroke:none
 ```
 
-The pipeline is **deterministic** — input → processing → retrieval → synthesis →
-memory update. There is no autonomous agent in V1. Agents are reconsidered at M6,
-when multiple knowledge sources make retrieval orchestration a real problem
-rather than a decoration ([ADR-0001](docs/adr/0001-memory-architecture.md)).
+**A through D are real** as of M2 — a raw-audio API, not a recording UI (that's
+M7); everything from E onward is still ahead. The pipeline is **deterministic**
+— input → processing → retrieval → synthesis → memory update. There is no
+autonomous agent in V1. Agents are reconsidered at M6, when multiple knowledge
+sources make retrieval orchestration a real problem rather than a decoration
+([ADR-0001](docs/adr/0001-memory-architecture.md)).
 
 ---
 
@@ -90,7 +93,7 @@ product is supposed to start being good.
 ```mermaid
 flowchart TD
     L1["<b>L1 · Working memory</b><br/>current session context<br/><i>Postgres, short-lived, verbatim</i>"]
-    L2["<b>L2 · Episodic memory</b> — <code>memories</code><br/>predictions · opinions · reactions · confusions<br/><i>embedded + tsvector + structure_ordinal</i>"]
+    L2["<b>L2 · Episodic memory</b> — <code>memories</code><br/>predictions · opinions · reactions · confusions<br/><i>structure_ordinal now; embedding + tsvector at M3</i>"]
     L3["<b>L3 · Semantic profile</b> — <code>preference_facts</code><br/>'prefers unreliable narrators'<br/><i>no embedding — small enough to load wholesale</i>"]
 
     L1 -->|extraction| L2
@@ -172,26 +175,27 @@ flowchart TB
         DRAIN["POST /internal/jobs/drain<br/><i>bounded: max_jobs, budget_seconds</i>"]
     end
     subgraph S ["Supabase — free tier"]
-        DB[("Postgres 17 + pgvector")]
+        DB[("Postgres 17 + pgvector<br/><i>audio as bytea on captures — M2</i>")]
         CRON["pg_cron<br/><i>every 60s</i>"]
-        ST[("Storage — audio blobs, M2")]
     end
 
     API -->|"enqueue (transactional)"| DB
     CRON -->|"pg_net HTTP call"| DRAIN
     DRAIN -->|"FOR UPDATE SKIP LOCKED"| DB
-    API --> ST
 
     style API fill:#238636,color:#fff,stroke:none
     style DRAIN fill:#238636,color:#fff,stroke:none
     style DB fill:#8957e5,color:#fff,stroke:none
     style CRON fill:#8957e5,color:#fff,stroke:none
-    style ST fill:#8957e5,color:#fff,stroke:none
 ```
 
 The health endpoint shipped to the real URL **at M0, before any feature
 existed**. Deployment problems found at M0 cost an afternoon; found at M7 they
 end the project.
+
+Audio lives as `bytea` directly on the `captures` row, not in a blob store —
+short voice reflections fit comfortably, and no caller yet needs one
+(`persistence/models/capture.py`).
 
 ---
 
@@ -205,8 +209,15 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `POST /imports/goodreads/preview` / `/commit` | CSV in, diff out, then apply. Dedupe key: ISBN13 → ISBN10 → normalized title+author. |
 | `POST /books/epub/preview` / `/commit` | EPUB in, a proposed chapter structure out (from spine order), then persisted unverified. |
 | `GET` / `PUT /books/{id}/structure` | Read the proposal; submit corrections. One list-replace expresses merge, split, relabel, and exclude (ADR-0004). |
+| `POST /books/{id}/captures` | Raw audio in. Resumes or starts the book's active reading session at the given chapter, persists the audio, enqueues transcription. |
+| `GET /books/{id}/captures/{capture_id}` | A capture's pipeline status and, once each stage runs, its raw/corrected transcript. |
+| `GET /books/{id}/reading-sessions/active` | The book's current session — chapter, ordinal, normalized progress (ADR-0004). |
+| `POST /books/{id}/reading-sessions/{id}/end` | Marks a session `completed` or `abandoned` — a DNF is a preference signal, never deleted. |
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
 | `POST /internal/jobs/drain`, `/internal/demo/seed` | Ops-only, bearer-secret protected. |
+
+Submitting a capture enqueues three chained jobs — transcribe, correct, extract
+— each independently retryable on the M0 queue rather than one long request.
 
 No frontend calls these yet; they're driven by `curl`/tests today and will get
 a PWA in M7.
@@ -219,7 +230,7 @@ a PWA in M7.
 |---|---|---|
 | **M0** | Foundation — schema, job queue, provider fakes, deployed | ✅ done |
 | **M1** | Import and structure — Goodreads CSV, EPUB, chapter verification | ✅ done |
-| **M2** | Capture and voice — PWA recording, transcription, extraction | ⬜ |
+| **M2** | Capture and voice — transcription, entity correction, extraction (PWA recording UI deferred to M7) | ✅ done |
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ⬜ |
 | **M4** | Profile — consolidation, confidence decay, supersede logic | ⬜ |
 | **M5** | Predictions — lifecycle, resolution windows, evidence linking | ⬜ |
@@ -286,7 +297,7 @@ which none of the schema assertions executed.
 ```bash
 createdb alam_test
 export ALAM_TEST_DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/alam_test
-uv run pytest                    # 218 tests; without the variable, 90 skip
+uv run pytest                    # 295 tests; without the variable, 134 skip
 ```
 
 Migrations run against `ALAM_DATABASE_URL`:
@@ -328,3 +339,14 @@ Stated up front rather than discovered:
   ([ADR-0004](docs/adr/0004-reading-progress-model.md)).
 - **Single-user by design.** No multi-tenancy, no horizontal scale, no caching
   layer, no read replicas.
+- **Every provider is still a fake.** Transcription, correction, and
+  extraction all run — deterministically, for free, offline — against the
+  fakes from M0. No real STT or LLM is wired up yet; `ProviderKind` in
+  `config/settings.py` permits only `"fake"`, so a real one configured before
+  it exists fails at startup rather than silently.
+- **Re-verifying a chapter that already has a reflection recorded against it
+  fails loudly, not gracefully.** `reading_sessions`, `captures`, and
+  `memories` all denormalize `structure_ordinal`; relabeling or reordering
+  chapters resyncs them, but excluding or merging away a chapter that already
+  has one of those rows raises an `IntegrityError` instead of repointing it.
+  Safe — no silent data loss — but not yet a good experience.
