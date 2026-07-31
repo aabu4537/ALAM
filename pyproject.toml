@@ -40,6 +40,17 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TC", "RUF"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is a call in an argument default. B008
+# exists to catch mutable defaults; these are neither mutable nor accidental.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+]
+
 [tool.ruff.lint.flake8-type-checking]
 # Pydantic resolves annotations at runtime, so imports feeding a model field
 # must stay out of TYPE_CHECKING blocks or validation breaks at import time.

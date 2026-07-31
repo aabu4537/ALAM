@@ -12,9 +12,9 @@ portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
 > **Status: M0 (Foundation), in progress.** The skeleton, typed settings, health
-> endpoint, and CI exist. The schema, job queue, providers, and deployment do
-> not yet. The milestone table below marks what is real. Nothing in this README
-> describes behaviour that is not committed.
+> endpoint, CI, the first migration, and the job queue exist. Providers and
+> deployment do not yet. The milestone table below marks what is real. Nothing
+> in this README describes behaviour that is not committed.
 
 ---
 
@@ -262,7 +262,14 @@ Migrations run against `ALAM_DATABASE_URL`:
 
 ```bash
 uv run alembic upgrade head
-uv run alembic downgrade base    # the first migration round-trips cleanly
+uv run alembic downgrade base    # migrations round-trip cleanly
+```
+
+The worker loop, for local development — production uses the scheduled HTTP
+drain instead, calling the same `drain()`:
+
+```bash
+python -m alam.jobs.loop
 ```
 
 ### Contributing workflow
