@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     than accepting them.
     """
 
+    demo_seed_secret: SecretStr | None = None
+    """Bearer token for POST /internal/demo/seed.
+
+    A separate secret from ``drain_secret`` — draining the queue and creating
+    demo data are different operations with different blast radii, and one
+    leaking should not imply the other is exposed too. Same fail-closed
+    default as the drain secret.
+    """
+
     # --- Providers ---
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"
