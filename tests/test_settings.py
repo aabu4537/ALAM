@@ -1,13 +1,24 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 from pydantic import ValidationError
 
 from alam.config.settings import Settings
 
 
+def test_the_environment_is_isolated() -> None:
+    """Guards the fixture in conftest, not the code under test.
+
+    Without this, an ambient ``ALAM_*`` variable silently changes what the
+    tests below are asserting — which is how CI and local disagreed.
+    """
+    assert [k for k in os.environ if k.startswith("ALAM_")] == []
+
+
 def test_defaults_are_usable_without_any_environment() -> None:
-    settings = Settings(_env_file=None)
+    settings = Settings()
 
     assert settings.env == "local"
     assert settings.job_max_attempts == 5
@@ -17,14 +28,14 @@ def test_env_prefix_is_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALAM_ENV", "production")
     monkeypatch.setenv("ALAM_JOB_MAX_ATTEMPTS", "9")
 
-    settings = Settings(_env_file=None)
+    settings = Settings()
 
     assert settings.env == "production"
     assert settings.job_max_attempts == 9
 
 
 def test_settings_are_immutable() -> None:
-    settings = Settings(_env_file=None)
+    settings = Settings()
 
     with pytest.raises(ValidationError):
         settings.env = "production"  # type: ignore[misc]
@@ -49,4 +60,4 @@ def test_invalid_values_are_rejected(
     monkeypatch.setenv(field, value)
 
     with pytest.raises(ValidationError):
-        Settings(_env_file=None)
+        Settings()
