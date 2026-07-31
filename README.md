@@ -12,9 +12,10 @@ portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
 > **Status: M0 (Foundation), in progress.** The skeleton, typed settings, health
-> endpoint, CI, the first migration, and the job queue exist. Providers and
-> deployment do not yet. The milestone table below marks what is real. Nothing
-> in this README describes behaviour that is not committed.
+> endpoint, CI, migrations, the job queue, and the provider Protocols with
+> fakes all exist. Only deployment is outstanding. The milestone table below
+> marks what is real. Nothing in this README describes behaviour that is not
+> committed.
 
 ---
 
@@ -135,7 +136,7 @@ testable in milliseconds with no fixtures and no model in the loop.
 - **No Celery, no Redis, no external broker.** The job queue is Postgres using
   `SELECT ... FOR UPDATE SKIP LOCKED`. Transactional enqueue is the point.
 - **Provider access goes through Protocols**, with fakes. Tests never hit the
-  network.
+  network — enforced by disabling sockets, not by convention.
 - **Every LLM output records the prompt version id** that produced it.
 - **Every embedding column carries `embedding_model` and `embedding_version`**,
   so model migrations are incremental rather than stop-the-world.

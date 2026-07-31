@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql+psycopg://alam:alam@localhost:5432/alam"
 
+    database_use_transaction_pooler: bool = False
+    """Set when connecting through Supabase's transaction pooler (port 6543).
+
+    Switches the engine to NullPool with prepared statements disabled. Wrong in
+    either direction: a client-side pool on top of the pooler exhausts server
+    slots, and disabling pooling for a long-lived worker throws away every
+    connection. See ADR-0007 and persistence/session.py.
+    """
+
     # --- Job queue ---
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0)
     job_max_attempts: int = Field(default=5, ge=1)
