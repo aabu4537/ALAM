@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import select
+
+from alam.persistence.models.capture import Capture, CaptureStatus
+
+if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Sequence
+
+    from sqlalchemy.orm import Session
+
+
+class CaptureRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def create(
+        self,
+        *,
+        reading_session_id: uuid.UUID,
+        media_item_id: uuid.UUID,
+        structure_unit_id: uuid.UUID,
+        structure_ordinal: int,
+        audio_data: bytes,
+    ) -> Capture:
+        capture = Capture(
+            reading_session_id=reading_session_id,
+            media_item_id=media_item_id,
+            structure_unit_id=structure_unit_id,
+            structure_ordinal=structure_ordinal,
+            audio_data=audio_data,
+        )
+        self._session.add(capture)
+        self._session.flush()
+        return capture
+
+    def get(self, capture_id: uuid.UUID) -> Capture | None:
+        return self._session.get(Capture, capture_id)
+
+    def list_for_media_item(self, media_item_id: uuid.UUID) -> Sequence[Capture]:
+        return self._session.scalars(
+            select(Capture)
+            .where(Capture.media_item_id == media_item_id)
+            .order_by(Capture.created_at)
+        ).all()
+
+    def mark_transcribed(
+        self, capture: Capture, *, raw_transcript: str, transcript_model: str
+    ) -> Capture:
+        capture.raw_transcript = raw_transcript
+        capture.transcript_model = transcript_model
+        capture.status = CaptureStatus.TRANSCRIBED
+        self._session.flush()
+        return capture
+
+    def mark_corrected(self, capture: Capture, *, corrected_transcript: str) -> Capture:
+        capture.corrected_transcript = corrected_transcript
+        capture.status = CaptureStatus.CORRECTED
+        self._session.flush()
+        return capture
+
+    def mark_extracted(self, capture: Capture) -> Capture:
+        capture.status = CaptureStatus.EXTRACTED
+        self._session.flush()
+        return capture
+
+    def resync_ordinal(self, *, structure_unit_id: uuid.UUID, ordinal: int) -> None:
+        """Repairs the denormalized ordinal after structure re-verification
+        renumbers the unit this capture was recorded at (CLAUDE.md rule 1,
+        ADR-0006). Called from ``services/structure_plan.py``."""
+        for capture in self._session.scalars(
+            select(Capture).where(Capture.structure_unit_id == structure_unit_id)
+        ):
+            capture.structure_ordinal = ordinal
+        self._session.flush()

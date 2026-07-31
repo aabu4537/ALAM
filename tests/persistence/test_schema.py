@@ -25,9 +25,10 @@ def test_vector_extension_is_enabled(session: Session) -> None:
 
 
 def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
-    """M0 ships four tables. `memories`, `preference_facts`, and content chunks
-    are later milestones, and a stray table here means something was built
-    ahead of its milestone."""
+    """M0 shipped four tables; M2 adds `reading_sessions`, `captures`
+    (session 1), and `memories` (session 3). `preference_facts` and content
+    chunks are later milestones, and a stray table here means something was
+    built ahead of its milestone."""
     tables = set(
         session.scalars(
             text(
@@ -37,7 +38,15 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
         ).all()
     )
 
-    assert tables == {"users", "media_items", "media_structure_units", "jobs"}
+    assert tables == {
+        "users",
+        "media_items",
+        "media_structure_units",
+        "jobs",
+        "reading_sessions",
+        "captures",
+        "memories",
+    }
 
 
 def test_ordinal_uniqueness_is_deferrable(session: Session) -> None:
@@ -99,6 +108,9 @@ def test_discriminator_columns_are_constrained_in_the_database(
     assert "ck_media_items_media_type" in checks
     assert "ck_media_structure_units_unit_type" in checks
     assert "ck_jobs_status" in checks
+    assert "ck_reading_sessions_status" in checks
+    assert "ck_captures_status" in checks
+    assert "ck_memories_memory_type" in checks
 
 
 def test_claim_path_indexes_are_partial(session: Session) -> None:
@@ -135,6 +147,38 @@ def test_unknown_media_type_is_rejected_by_the_database(session: Session) -> Non
                 "VALUES (gen_random_uuid(), :uid, 'podcast', 'Nope')"
             ),
             {"uid": user_id},
+        )
+
+
+def test_current_progress_out_of_range_is_rejected_by_the_database(session: Session) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    user_id = session.execute(
+        text("INSERT INTO users (id, display_name) VALUES (gen_random_uuid(), 'x') RETURNING id")
+    ).scalar_one()
+    item_id = session.execute(
+        text(
+            "INSERT INTO media_items (id, user_id, media_type, title) "
+            "VALUES (gen_random_uuid(), :uid, 'book', 'x') RETURNING id"
+        ),
+        {"uid": user_id},
+    ).scalar_one()
+    unit_id = session.execute(
+        text(
+            "INSERT INTO media_structure_units (id, media_item_id, ordinal, unit_type, label) "
+            "VALUES (gen_random_uuid(), :item_id, 1, 'chapter', 'Ch 1') RETURNING id"
+        ),
+        {"item_id": item_id},
+    ).scalar_one()
+
+    with pytest.raises(IntegrityError):
+        session.execute(
+            text(
+                "INSERT INTO reading_sessions "
+                "(id, media_item_id, current_structure_unit_id, current_ordinal, current_progress) "
+                "VALUES (gen_random_uuid(), :item_id, :unit_id, 1, 1.5)"
+            ),
+            {"item_id": item_id, "unit_id": unit_id},
         )
 
 

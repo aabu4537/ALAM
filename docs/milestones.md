@@ -5,7 +5,7 @@ out of scope — see `CLAUDE.md`.
 
 ---
 
-## M0 — Foundation *(current)*
+## M0 — Foundation *(complete)*
 
 - Docker Compose: Postgres + pgvector, app container
 - Alembic wired; first migration creates the `vector` extension, `users`,
@@ -49,18 +49,41 @@ opportunistically when present but nothing depends on it.
 
 ---
 
-## M2 — Capture and voice
+## M2 — Capture and voice *(complete)*
 
-- PWA recording with IndexedDB offline queue, syncing on reconnect
-- Transcription
-- Entity correction: per-book entity list passed as a biasing prompt, plus a
-  post-hoc correction pass
-- Structured extraction into typed memories (fixed enum, one capture → many
-  memories)
+- **Transcription:** the STT provider is biased with a per-book entity list —
+  title, author, and chapter labels, the cheapest available signal, since
+  nothing has been extracted from the text itself yet
+- **Entity correction:** the same entity list drives a post-hoc LLM pass that
+  fixes misheard proper nouns in the raw transcript
+- **Structured extraction into typed memories:** fixed enum
+  (`prediction`/`opinion`/`emotional_reaction`/`confusion`/
+  `character_judgment`/`favorite_moment`/`meta_comment`/`other`), one capture
+  fanning out to many memory rows from a single LLM call
+- Capture → transcribe → correct → extract runs as three independently
+  retryable jobs on the M0 queue, not one long request
+
+**Deferred, by explicit decision:** the PWA recording UI and its IndexedDB
+offline queue. CLAUDE.md's "do not build yet" list rules out frontend work
+before M7, and M2's own DoD called for exactly that PWA — rather than pick a
+side of that conflict silently, it was raised and resolved with the human:
+M2 ships as a backend capability only (an audio-upload API plus the
+transcribe/correct/extract pipeline), and the recording surface itself is
+built when frontend work starts at M7.
+
+**A gap this milestone surfaced and fixed:** `reading_sessions.current_ordinal`,
+`captures.structure_ordinal`, and `memories.structure_ordinal` are all
+denormalized from `media_structure_units.ordinal` (rule 1). Structure
+re-verification (M1, ADR-0004) can renumber a unit any of those rows already
+point at; `services/structure_plan.py` now resyncs all three after every
+renumber. Excluding or merging away a unit that already has a session,
+capture, or memory against it still fails loudly via the foreign key — no
+`ondelete` cascade — rather than silently orphaning data. That remains a real
+limitation, just a safe one.
 
 ---
 
-## M3 — Memory and retrieval
+## M3 — Memory and retrieval *(current)*
 
 - Embeddings with `embedding_model` / `embedding_version` recorded
 - Hybrid retrieval: pgvector cosine + Postgres full-text, fused with reciprocal

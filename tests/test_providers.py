@@ -192,6 +192,20 @@ class TestSpeechToText:
         with pytest.raises(ProviderError):
             stt.transcribe(b"x")
 
+    def test_biasing_entities_are_recorded_for_the_caller_to_assert_on(self) -> None:
+        stt = FakeSpeechToText()
+
+        stt.transcribe(b"x", entities=["Muad'Dib", "Arrakis"])
+
+        assert stt.calls[0].entities == ("Muad'Dib", "Arrakis")
+
+    def test_no_entities_records_an_empty_tuple_rather_than_none(self) -> None:
+        stt = FakeSpeechToText()
+
+        stt.transcribe(b"x")
+
+        assert stt.calls[0].entities == ()
+
 
 class TestNoNetwork:
     """Rule 8, enforced rather than asserted.
