@@ -11,11 +11,20 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 (Foundation), in progress.** The skeleton, typed settings, health
-> endpoint, CI, migrations, the job queue, and the provider Protocols with
-> fakes all exist. Only deployment is outstanding. The milestone table below
-> marks what is real. Nothing in this README describes behaviour that is not
-> committed.
+> **Status: M0 and M1 complete, M2 not started.** Deployed and live at
+> [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
+> yet (that's M7), but the API is real:
+>
+> ```bash
+> curl https://alam-zeta.vercel.app/health
+> curl https://alam-zeta.vercel.app/demo/books
+> ```
+>
+> The second one returns a seeded, invented reading history — the demo persona
+> generator from M1. It is not the owner's real data; that boundary is
+> structural, not a convention (see "Standing constraints" below). The
+> milestone table further down marks what is real. Nothing in this README
+> describes behaviour that is not committed.
 
 ---
 
@@ -147,40 +156,60 @@ testable in milliseconds with no fixtures and no model in the loop.
 
 ## Deployment topology
 
-Split deliberately. The job queue is a long-lived polling process, and a
-serverless platform has nowhere to host one — adapting would couple the backend's
-execution model to a single vendor ([ADR-0005](docs/adr/0005-deployment-topology.md)).
+All-Vercel, not split. [ADR-0005](docs/adr/0005-deployment-topology.md)
+originally rejected this for one reason: the job queue is a long-lived polling
+process, and serverless has nowhere to host one. What changed the answer
+([ADR-0007](docs/adr/0007-serverless-worker-execution.md)) is realizing the
+**trigger** and the **queue** don't have to live in the same place — `pg_cron`,
+already sitting next to the queue in Postgres, can wake up a bounded HTTP drain
+on a schedule Vercel Cron's Hobby tier (once a day) could never manage. No
+standing worker, no paid tier, $0/month.
 
 ```mermaid
 flowchart TB
-    subgraph V ["Vercel"]
-        PWA["Next.js PWA<br/><i>M7</i>"]
+    subgraph V ["Vercel — Fluid Compute"]
+        API["FastAPI web service<br/><i>PWA joins here at M7</i>"]
+        DRAIN["POST /internal/jobs/drain<br/><i>bounded: max_jobs, budget_seconds</i>"]
     end
-    subgraph R ["Render / Fly.io"]
-        API["FastAPI web service"]
-        W["Worker process<br/><i>same repo, separate service</i>"]
-    end
-    subgraph S ["Supabase"]
-        DB[("Postgres + pgvector")]
-        ST[("Storage — audio blobs")]
+    subgraph S ["Supabase — free tier"]
+        DB[("Postgres 17 + pgvector")]
+        CRON["pg_cron<br/><i>every 60s</i>"]
+        ST[("Storage — audio blobs, M2")]
     end
 
-    PWA -->|HTTPS| API
     API -->|"enqueue (transactional)"| DB
-    W -->|"FOR UPDATE SKIP LOCKED"| DB
+    CRON -->|"pg_net HTTP call"| DRAIN
+    DRAIN -->|"FOR UPDATE SKIP LOCKED"| DB
     API --> ST
-    W --> ST
 
-    style PWA fill:#1f6feb,color:#fff,stroke:none
     style API fill:#238636,color:#fff,stroke:none
-    style W fill:#238636,color:#fff,stroke:none
+    style DRAIN fill:#238636,color:#fff,stroke:none
     style DB fill:#8957e5,color:#fff,stroke:none
+    style CRON fill:#8957e5,color:#fff,stroke:none
     style ST fill:#8957e5,color:#fff,stroke:none
 ```
 
-The health endpoint and one live worker ship to the real URL **at M0, before any
-feature exists**. Deployment problems found at M0 cost an afternoon; found at M7
-they end the project.
+The health endpoint shipped to the real URL **at M0, before any feature
+existed**. Deployment problems found at M0 cost an afternoon; found at M7 they
+end the project.
+
+---
+
+## What works today
+
+Everything below is a real endpoint on the live URL, not a plan.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /health` | Liveness — env, version. Doesn't touch the database (ADR-0005). |
+| `POST /imports/goodreads/preview` / `/commit` | CSV in, diff out, then apply. Dedupe key: ISBN13 → ISBN10 → normalized title+author. |
+| `POST /books/epub/preview` / `/commit` | EPUB in, a proposed chapter structure out (from spine order), then persisted unverified. |
+| `GET` / `PUT /books/{id}/structure` | Read the proposal; submit corrections. One list-replace expresses merge, split, relabel, and exclude (ADR-0004). |
+| `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
+| `POST /internal/jobs/drain`, `/internal/demo/seed` | Ops-only, bearer-secret protected. |
+
+No frontend calls these yet; they're driven by `curl`/tests today and will get
+a PWA in M7.
 
 ---
 
@@ -188,8 +217,8 @@ they end the project.
 
 | | Milestone | Status |
 |---|---|---|
-| **M0** | Foundation — schema, job queue, provider fakes, deployed | 🚧 in progress |
-| **M1** | Import and structure — Goodreads CSV, EPUB, chapter verification | ⬜ |
+| **M0** | Foundation — schema, job queue, provider fakes, deployed | ✅ done |
+| **M1** | Import and structure — Goodreads CSV, EPUB, chapter verification | ✅ done |
 | **M2** | Capture and voice — PWA recording, transcription, extraction | ⬜ |
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ⬜ |
 | **M4** | Profile — consolidation, confidence decay, supersede logic | ⬜ |
@@ -218,6 +247,7 @@ consequences, and the alternatives that were rejected.
 | [0004](docs/adr/0004-reading-progress-model.md) | Reading progress model |
 | [0005](docs/adr/0005-deployment-topology.md) | Deployment topology |
 | [0006](docs/adr/0006-ordinal-stability.md) | Ordinal stability and structure re-verification |
+| [0007](docs/adr/0007-serverless-worker-execution.md) | Serverless worker execution — `pg_cron`-drained queue, $0/month |
 
 ---
 
@@ -235,8 +265,8 @@ curl localhost:8000/health
 With Docker:
 
 ```bash
-docker compose up             # web + Postgres 16 with pgvector
-docker compose --profile worker up
+docker compose up             # web + Postgres 17 with pgvector
+docker compose --profile worker up   # local-only; production uses pg_cron (ADR-0007)
 ```
 
 Checks — all of these run in CI on every push and pull request:
@@ -256,7 +286,7 @@ which none of the schema assertions executed.
 ```bash
 createdb alam_test
 export ALAM_TEST_DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/alam_test
-uv run pytest                    # 42 tests; without the variable, 29 skip
+uv run pytest                    # 218 tests; without the variable, 90 skip
 ```
 
 Migrations run against `ALAM_DATABASE_URL`:
@@ -275,9 +305,10 @@ python -m alam.jobs.loop
 
 ### Contributing workflow
 
-`main` stays deployable. Work happens on a milestone branch (`m0-foundation`),
-one pull request per session, squash-merged; the milestone branch merges to
-`main` when its definition of done is met. Conventional commits.
+`main` stays deployable. Work happens on a milestone branch (`m0-foundation`,
+`m1-foundation`, ...), one pull request per session, squash-merged; the
+milestone branch merges to `main` when its definition of done is met.
+Conventional commits.
 
 Agents working in this repo: read [`CLAUDE.md`](CLAUDE.md) first. It records the
 non-negotiable decisions and, more importantly, the list of things **not** to
