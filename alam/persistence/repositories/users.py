@@ -56,5 +56,10 @@ class UserRepository:
         through a dedicated signup flow, since there is exactly one."""
         return self.get_owner() or self.create(display_name=display_name, is_demo=False)
 
+    def get_or_create_demo(self, display_name: str) -> User:
+        """Idempotent bootstrap for the demo persona, symmetric with
+        ``get_or_create_owner`` — seeding is safe to run more than once."""
+        return self.get_demo_user() or self.create(display_name=display_name, is_demo=True)
+
     def delete(self, user: User) -> None:
         self._session.delete(user)
