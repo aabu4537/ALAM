@@ -28,18 +28,24 @@ the interface decision while changing it is still free.
 
 ---
 
-## M1 — Import and structure
+## M1 — Import and structure *(complete)*
 
-- Goodreads CSV upload; deterministic dedupe key
+- **Goodreads CSV upload:** deterministic dedupe key
   (ISBN13 → ISBN10 → normalized title+author), upsert semantics, diff preview
   before commit
-- EPUB ingestion
-- Chapter extraction with structure preview and manual correction (ADR-0004)
-- Seeded demo persona generator (doubles as cold-start bootstrap)
+- **EPUB ingestion:** container parsing proposes a chapter structure from
+  spine order
+- **Chapter extraction with structure preview and manual correction
+  (ADR-0004):** merge/split/relabel/exclude, expressed as one operation —
+  submit the desired final structure, diffed against what's persisted
+- **Seeded demo persona generator** (doubles as cold-start bootstrap): a
+  fixed, invented reading history on the `is_demo` user, reachable at
+  `GET /demo/books` with no authentication
 
-**Open question blocking design:** how much review text exists in the actual
-Goodreads export? If sparse, cold start must be built on ratings, genres,
-shelves, and early voice reflections instead.
+**Resolved open question:** checked a real Goodreads export — 0 of 16 books
+had review text, ratings on 10/16, ISBNs on 10/16. Cold start and the
+importer are built on ratings, shelves, and dates; review text is ingested
+opportunistically when present but nothing depends on it.
 
 ---
 
