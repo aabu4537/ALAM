@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "m*-**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "0"
+
+jobs:
+  # Split into three jobs on purpose: a red X should say which of lint,
+  # types, or behaviour broke without opening the log.
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+  typecheck:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      # Strict on domain/ is enforced by the per-module override in
+      # pyproject.toml, so a single invocation covers both tiers.
+      - name: mypy
+        run: uv run mypy alam tests
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      - name: pytest
+        env:
+          ALAM_ENV: ci
+          ALAM_LOG_FORMAT: json
+        run: uv run pytest -q
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build -t alam:ci .

@@ -1,0 +1,53 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: alam
+      POSTGRES_PASSWORD: alam
+      POSTGRES_DB: alam
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alam -d alam"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build: .
+    command: uvicorn alam.api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      ALAM_DATABASE_URL: postgresql+psycopg://alam:alam@db:5432/alam
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Separate process, same image — mirrors the split deployment in ADR-0005.
+  # The handler loop lands in Session 3; this service is wired now so the
+  # topology is real from the start rather than retrofitted.
+  worker:
+    build: .
+    command: python -m alam.jobs.worker
+    environment:
+      ALAM_DATABASE_URL: postgresql+psycopg://alam:alam@db:5432/alam
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["worker"]
+
+volumes:
+  pgdata:
