@@ -12,9 +12,10 @@ portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
 > **Status: M0 (Foundation), in progress.** The skeleton, typed settings, health
-> endpoint, and CI exist. The schema, job queue, providers, and deployment do
-> not yet. The milestone table below marks what is real. Nothing in this README
-> describes behaviour that is not committed.
+> endpoint, CI, migrations, the job queue, and the provider Protocols with
+> fakes all exist. Only deployment is outstanding. The milestone table below
+> marks what is real. Nothing in this README describes behaviour that is not
+> committed.
 
 ---
 
@@ -135,7 +136,7 @@ testable in milliseconds with no fixtures and no model in the loop.
 - **No Celery, no Redis, no external broker.** The job queue is Postgres using
   `SELECT ... FOR UPDATE SKIP LOCKED`. Transactional enqueue is the point.
 - **Provider access goes through Protocols**, with fakes. Tests never hit the
-  network.
+  network — enforced by disabling sockets, not by convention.
 - **Every LLM output records the prompt version id** that produced it.
 - **Every embedding column carries `embedding_model` and `embedding_version`**,
   so model migrations are incremental rather than stop-the-world.
@@ -216,6 +217,7 @@ consequences, and the alternatives that were rejected.
 | [0003](docs/adr/0003-media-abstraction.md) | Media abstraction — seams, not a plugin system |
 | [0004](docs/adr/0004-reading-progress-model.md) | Reading progress model |
 | [0005](docs/adr/0005-deployment-topology.md) | Deployment topology |
+| [0006](docs/adr/0006-ordinal-stability.md) | Ordinal stability and structure re-verification |
 
 ---
 
@@ -237,12 +239,38 @@ docker compose up             # web + Postgres 16 with pgvector
 docker compose --profile worker up
 ```
 
-Checks — all three run in CI on every push and pull request:
+Checks — all of these run in CI on every push and pull request:
 
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run mypy alam tests
 uv run pytest
+```
+
+**Database tests.** Anything touching Postgres is marked `db` and **skips**
+unless `ALAM_TEST_DATABASE_URL` points at a database with pgvector available.
+CI always sets it, plus `ALAM_REQUIRE_DB_TESTS=1`, which turns that skip into a
+failure — a broken service container would otherwise produce a green run in
+which none of the schema assertions executed.
+
+```bash
+createdb alam_test
+export ALAM_TEST_DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/alam_test
+uv run pytest                    # 42 tests; without the variable, 29 skip
+```
+
+Migrations run against `ALAM_DATABASE_URL`:
+
+```bash
+uv run alembic upgrade head
+uv run alembic downgrade base    # migrations round-trip cleanly
+```
+
+The worker loop, for local development — production uses the scheduled HTTP
+drain instead, calling the same `drain()`:
+
+```bash
+python -m alam.jobs.loop
 ```
 
 ### Contributing workflow

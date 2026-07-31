@@ -1,0 +1,58 @@
+name: Migrate
+
+# Alembic runs here rather than inside a serverless function (ADR-0007). A
+# function is the wrong place for schema changes — it can be killed mid-run,
+# several can start at once, and none of them should hold credentials with DDL
+# rights. CI already has the credential and runs exactly once per trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "migrate" to confirm running against production'
+        required: true
+  push:
+    branches: ["main"]
+    paths:
+      - "alam/persistence/migrations/**"
+      - ".github/workflows/migrate.yml"
+
+concurrency:
+  # Never let two migration runs overlap. Alembic takes a lock, but a queued
+  # second run against a half-applied schema is worth avoiding outright.
+  group: migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: alembic upgrade head
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: verify manual confirmation
+        if: github.event_name == 'workflow_dispatch' && inputs.confirm != 'migrate'
+        run: |
+          echo "::error::confirmation text did not match"
+          exit 1
+
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+
+      - name: show pending migrations
+        env:
+          ALAM_DATABASE_URL: ${{ secrets.ALAM_DATABASE_URL }}
+        run: |
+          echo "current:"; uv run alembic current
+          echo "head:";    uv run alembic heads
+
+      - name: alembic upgrade head
+        env:
+          ALAM_DATABASE_URL: ${{ secrets.ALAM_DATABASE_URL }}
+        run: uv run alembic upgrade head
+
+      - name: confirm final revision
+        env:
+          ALAM_DATABASE_URL: ${{ secrets.ALAM_DATABASE_URL }}
+        run: uv run alembic current

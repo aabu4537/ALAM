@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "m*-**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "0"
+
+jobs:
+  # Split into three jobs on purpose: a red X should say which of lint,
+  # types, or behaviour broke without opening the log.
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+  typecheck:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      # Strict on domain/ is enforced by the per-module override in
+      # pyproject.toml, so a single invocation covers both tiers.
+      - name: mypy
+        run: uv run mypy alam tests
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: alam
+          POSTGRES_PASSWORD: alam
+          POSTGRES_DB: alam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alam -d alam_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+
+      - name: pytest
+        env:
+          ALAM_ENV: ci
+          ALAM_LOG_FORMAT: json
+          ALAM_TEST_DATABASE_URL: postgresql+psycopg://alam:alam@localhost:5432/alam_test
+          # Turns the database-test skip into a hard failure. Without it, a
+          # broken service container produces a green run that quietly checked
+          # nothing — the schema assertions are the point of this job.
+          ALAM_REQUIRE_DB_TESTS: "1"
+        run: uv run pytest -q
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build -t alam:ci .
