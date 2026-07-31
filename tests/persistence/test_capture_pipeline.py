@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from alam.jobs.handlers import TRANSCRIBE_CAPTURE
+from alam.jobs.job_types import TRANSCRIBE_CAPTURE
 from alam.persistence.models.capture import CaptureStatus
 from alam.persistence.models.job import Job, JobStatus
 from alam.persistence.models.reading_session import ReadingSessionStatus
