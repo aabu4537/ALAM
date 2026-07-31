@@ -41,7 +41,7 @@ class ReadingSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[ReadingSessionStatus] = mapped_column(
         Enum(
             ReadingSessionStatus,
-            name="reading_session_status",
+            name="status",
             native_enum=False,
             create_constraint=True,
             length=20,
@@ -52,7 +52,15 @@ class ReadingSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     current_structure_unit_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("media_structure_units.id"), nullable=False
+        ForeignKey(
+            "media_structure_units.id",
+            # Explicit and shorter than what the naming convention would
+            # generate — "fk_reading_sessions_current_structure_unit_id_
+            # media_structure_units" is 67 characters, over Postgres's 63-byte
+            # identifier limit.
+            name="fk_reading_sessions_current_structure_unit_id",
+        ),
+        nullable=False,
     )
     """Deliberately not ``ondelete="CASCADE"``. Excluding a chapter that a
     session has already progressed through must fail loudly — an

@@ -37,7 +37,7 @@ def upgrade() -> None:
                 "active",
                 "completed",
                 "abandoned",
-                name="reading_session_status",
+                name="status",
                 native_enum=False,
                 create_constraint=True,
                 length=20,
@@ -76,7 +76,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["current_structure_unit_id"],
             ["media_structure_units.id"],
-            name="fk_reading_sessions_current_structure_unit_id_media_structure_units",
+            # Shortened from what the naming convention would generate — the
+            # full name is 67 characters, over Postgres's 63-byte identifier
+            # limit. Matches the explicit name set on the ORM model.
+            name="fk_reading_sessions_current_structure_unit_id",
         ),
         sa.CheckConstraint(
             "current_progress >= 0 AND current_progress <= 1",
@@ -107,7 +110,7 @@ def upgrade() -> None:
                 "corrected",
                 "extracted",
                 "failed",
-                name="capture_status",
+                name="status",
                 native_enum=False,
                 create_constraint=True,
                 length=20,

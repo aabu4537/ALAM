@@ -51,7 +51,7 @@ class Capture(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[CaptureStatus] = mapped_column(
         Enum(
             CaptureStatus,
-            name="capture_status",
+            name="status",
             native_enum=False,
             create_constraint=True,
             length=20,

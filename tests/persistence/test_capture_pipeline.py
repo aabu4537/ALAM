@@ -4,12 +4,12 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from alam.jobs.handlers import TRANSCRIBE_CAPTURE
-from alam.jobs.queue import JobQueue
 from alam.persistence.models.capture import CaptureStatus
-from alam.persistence.models.job import JobStatus
+from alam.persistence.models.job import Job, JobStatus
 from alam.persistence.models.reading_session import ReadingSessionStatus
 from alam.persistence.repositories import (
     CaptureRepository,
@@ -155,14 +155,16 @@ class TestSubmitCapture:
             audio=b"one",
         )
 
-        pending = [
-            job
-            for job in JobQueue(session).claim(max_jobs=10, lease_seconds=60)
-            if job.job_type == TRANSCRIBE_CAPTURE
-        ]
-        assert len(pending) == 1
-        assert pending[0].payload == {"capture_id": str(capture.id)}
-        assert pending[0].status is JobStatus.RUNNING  # claim() marks it running
+        # Not routed through JobQueue.claim() here: Postgres's `now()` is fixed
+        # at the start of the outer transaction the `session` fixture opened,
+        # which predates this test — `run_after <= now()` could never see a
+        # row enqueued mid-test this way. test_job_queue.py exercises claim()
+        # properly, against real committed transactions, for exactly this
+        # reason; this only needs to confirm the row landed.
+        jobs = session.scalars(select(Job).where(Job.job_type == TRANSCRIBE_CAPTURE)).all()
+        assert len(jobs) == 1
+        assert jobs[0].payload == {"capture_id": str(capture.id)}
+        assert jobs[0].status is JobStatus.PENDING
 
     def test_unknown_media_item_is_rejected(
         self, session: Session, owner: User, chapters: list[MediaStructureUnit]
