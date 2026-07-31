@@ -23,9 +23,9 @@ spoiler-safe insights, prediction resolutions, and recommendations.
 
 ## Current milestone
 
-**M0 — Foundation.**
+**M3 — Memory and retrieval.** M0, M1, and M2 are complete.
 
-Nothing outside the M0 definition of done in `docs/milestones.md` should be
+Nothing outside the M3 definition of done in `docs/milestones.md` should be
 implemented. If a task seems to require a later milestone's code, stop and say
 so rather than building it.
 
