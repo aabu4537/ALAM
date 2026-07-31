@@ -66,3 +66,33 @@ def test_invalid_values_are_rejected(
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        (
+            "postgresql://user:pw@host:6543/db",
+            "postgresql+psycopg://user:pw@host:6543/db",
+        ),
+        (
+            "postgres://user:pw@host:6543/db",
+            "postgresql+psycopg://user:pw@host:6543/db",
+        ),
+        (
+            "postgresql+psycopg://user:pw@host:6543/db",
+            "postgresql+psycopg://user:pw@host:6543/db",
+        ),
+    ],
+)
+def test_bare_postgres_schemes_are_rewritten_to_psycopg(
+    monkeypatch: pytest.MonkeyPatch, given: str, expected: str
+) -> None:
+    """Supabase's dashboard hands out bare ``postgresql://`` strings, which
+    default to a psycopg2 driver this project never installs — the project is
+    written against psycopg3 throughout. Pasting Supabase's string verbatim
+    must work rather than fail with an unrelated driver-import error.
+    """
+    monkeypatch.setenv("ALAM_DATABASE_URL", given)
+
+    assert Settings().database_url == expected
