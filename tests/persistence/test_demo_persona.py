@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from alam.persistence.models.capture import CaptureStatus
+from alam.persistence.models.media_item import MediaType
 from alam.persistence.repositories import (
     CaptureRepository,
     MediaItemRepository,
     MemoryRepository,
+    StructureUnitRepository,
     UserRepository,
 )
 from alam.services.demo_persona import DEMO_LIBRARY, get_demo_library, seed_demo_persona
@@ -85,6 +87,31 @@ class TestSeedDemoPersona:
             c for book in books for c in CaptureRepository(session).list_for_media_item(book.id)
         ]
         assert len(captures) == 1
+
+    def test_backfills_a_reflection_onto_a_book_seeded_before_it_existed(
+        self, session: Session
+    ) -> None:
+        """The real bug this guards: production's demo persona was seeded
+        under M1, before any book carried a ``reflection``. Re-running the
+        seed after M2 shipped must not skip Dune just because it already
+        exists — the new capture/memories have to land on the pre-existing
+        row, not be silently dropped."""
+        dune_seed = next(s for s in DEMO_LIBRARY if s.reflection is not None)
+        user = UserRepository(session).get_or_create_demo("Demo Reader")
+        items = MediaItemRepository(session)
+        pre_existing = items.create(
+            user_id=user.id, title=dune_seed.title, media_type=MediaType.BOOK
+        )
+        units = StructureUnitRepository(session)
+        for ordinal, label in enumerate(dune_seed.chapters, start=1):
+            units.create(media_item_id=pre_existing.id, ordinal=ordinal, label=label)
+
+        result = seed_demo_persona(session)
+
+        assert dune_seed.title in result.skipped_book_titles
+        captures = CaptureRepository(session).list_for_media_item(pre_existing.id)
+        assert len(captures) == 1
+        assert captures[0].status is CaptureStatus.EXTRACTED
 
 
 class TestGetDemoLibrary:

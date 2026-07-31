@@ -31,6 +31,7 @@ from alam.persistence.repositories.users import UserRepository
 
 if TYPE_CHECKING:
     import uuid
+    from collections.abc import Sequence
 
     from sqlalchemy.orm import Session
 
@@ -188,7 +189,7 @@ def _seed_reflection(
     session: Session,
     *,
     item_id: uuid.UUID,
-    units: list[MediaStructureUnit],
+    units: Sequence[MediaStructureUnit],
     reflection: DemoReflectionSeed,
 ) -> None:
     """Builds a capture already at ``EXTRACTED`` directly, rather than
@@ -226,45 +227,50 @@ def _seed_reflection(
 
 
 def seed_demo_persona(session: Session) -> DemoSeedResult:
+    """Idempotent at the level of each *feature*, not just each book — a book
+    created by an earlier milestone's seed still gets its reflection backfilled
+    if a later milestone adds one, rather than the whole book being skipped as
+    already-existing. Otherwise re-seeding after M2 shipped would silently
+    never add the new capture/memories to a persona seeded under M1."""
     user = UserRepository(session).get_or_create_demo(DEMO_DISPLAY_NAME)
 
     items = MediaItemRepository(session)
-    existing_titles = {b.title for b in items.list_for_user(user.id)}
+    units_repo = StructureUnitRepository(session)
+    captures_repo = CaptureRepository(session)
+    existing_items = {b.title: b for b in items.list_for_user(user.id)}
 
     created: list[str] = []
     skipped: list[str] = []
 
     for seed in DEMO_LIBRARY:
-        if seed.title in existing_titles:
+        item = existing_items.get(seed.title)
+
+        if item is not None:
             skipped.append(seed.title)
-            continue
+        else:
+            item = items.create(
+                user_id=user.id,
+                title=seed.title,
+                media_type=MediaType.BOOK,
+                attributes={
+                    "author": seed.author,
+                    "my_rating": seed.my_rating,
+                    "exclusive_shelf": seed.exclusive_shelf,
+                    "date_added": seed.date_added,
+                    "date_read": seed.date_read,
+                },
+            )
 
-        item = items.create(
-            user_id=user.id,
-            title=seed.title,
-            media_type=MediaType.BOOK,
-            attributes={
-                "author": seed.author,
-                "my_rating": seed.my_rating,
-                "exclusive_shelf": seed.exclusive_shelf,
-                "date_added": seed.date_added,
-                "date_read": seed.date_read,
-            },
-        )
+            if seed.chapters:
+                for ordinal, label in enumerate(seed.chapters, start=1):
+                    units_repo.create(media_item_id=item.id, ordinal=ordinal, label=label)
+                items.mark_structure_verified(item, at=dt.datetime.now(dt.UTC))
 
-        book_units = []
-        if seed.chapters:
-            units = StructureUnitRepository(session)
-            book_units = [
-                units.create(media_item_id=item.id, ordinal=ordinal, label=label)
-                for ordinal, label in enumerate(seed.chapters, start=1)
-            ]
-            items.mark_structure_verified(item, at=dt.datetime.now(dt.UTC))
+            created.append(seed.title)
 
-        if seed.reflection:
+        if seed.reflection and not captures_repo.list_for_media_item(item.id):
+            book_units = units_repo.list_for_media_item(item.id)
             _seed_reflection(session, item_id=item.id, units=book_units, reflection=seed.reflection)
-
-        created.append(seed.title)
 
     return DemoSeedResult(
         user=user, created_book_titles=tuple(created), skipped_book_titles=tuple(skipped)
