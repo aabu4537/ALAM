@@ -216,6 +216,7 @@ consequences, and the alternatives that were rejected.
 | [0003](docs/adr/0003-media-abstraction.md) | Media abstraction — seams, not a plugin system |
 | [0004](docs/adr/0004-reading-progress-model.md) | Reading progress model |
 | [0005](docs/adr/0005-deployment-topology.md) | Deployment topology |
+| [0006](docs/adr/0006-ordinal-stability.md) | Ordinal stability and structure re-verification |
 
 ---
 
@@ -237,12 +238,31 @@ docker compose up             # web + Postgres 16 with pgvector
 docker compose --profile worker up
 ```
 
-Checks — all three run in CI on every push and pull request:
+Checks — all of these run in CI on every push and pull request:
 
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run mypy alam tests
 uv run pytest
+```
+
+**Database tests.** Anything touching Postgres is marked `db` and **skips**
+unless `ALAM_TEST_DATABASE_URL` points at a database with pgvector available.
+CI always sets it, plus `ALAM_REQUIRE_DB_TESTS=1`, which turns that skip into a
+failure — a broken service container would otherwise produce a green run in
+which none of the schema assertions executed.
+
+```bash
+createdb alam_test
+export ALAM_TEST_DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/alam_test
+uv run pytest                    # 42 tests; without the variable, 29 skip
+```
+
+Migrations run against `ALAM_DATABASE_URL`:
+
+```bash
+uv run alembic upgrade head
+uv run alembic downgrade base    # the first migration round-trips cleanly
 ```
 
 ### Contributing workflow
