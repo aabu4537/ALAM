@@ -25,10 +25,10 @@ def test_vector_extension_is_enabled(session: Session) -> None:
 
 
 def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
-    """M0 shipped four tables; M2 session 1 adds `reading_sessions` and
-    `captures`. `memories`, `preference_facts`, and content chunks are later
-    milestones, and a stray table here means something was built ahead of its
-    milestone."""
+    """M0 shipped four tables; M2 adds `reading_sessions`, `captures`
+    (session 1), and `memories` (session 3). `preference_facts` and content
+    chunks are later milestones, and a stray table here means something was
+    built ahead of its milestone."""
     tables = set(
         session.scalars(
             text(
@@ -45,6 +45,7 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
         "jobs",
         "reading_sessions",
         "captures",
+        "memories",
     }
 
 
@@ -109,6 +110,7 @@ def test_discriminator_columns_are_constrained_in_the_database(
     assert "ck_jobs_status" in checks
     assert "ck_reading_sessions_status" in checks
     assert "ck_captures_status" in checks
+    assert "ck_memories_memory_type" in checks
 
 
 def test_claim_path_indexes_are_partial(session: Session) -> None:

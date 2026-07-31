@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from alam.persistence.repositories import MediaItemRepository, UserRepository
+from alam.persistence.models.capture import CaptureStatus
+from alam.persistence.repositories import (
+    CaptureRepository,
+    MediaItemRepository,
+    MemoryRepository,
+    UserRepository,
+)
 from alam.services.demo_persona import DEMO_LIBRARY, get_demo_library, seed_demo_persona
 
 if TYPE_CHECKING:
@@ -50,6 +56,35 @@ class TestSeedDemoPersona:
 
         books = MediaItemRepository(session).list_for_user(result.user.id)
         assert len(books) == len(DEMO_LIBRARY)
+
+    def test_at_least_one_book_ships_with_an_extracted_memory(self, session: Session) -> None:
+        """Demonstrates the M2 capture -> transcribe -> correct -> extract
+        pipeline end-to-end with demo data, without real audio or a network
+        call — the same role ``test_at_least_one_book_ships_with_verified_
+        structure`` plays for ADR-0004."""
+        result = seed_demo_persona(session)
+
+        books = MediaItemRepository(session).list_for_user(result.user.id)
+        captures = [
+            c for book in books for c in CaptureRepository(session).list_for_media_item(book.id)
+        ]
+        assert captures
+        assert all(c.status is CaptureStatus.EXTRACTED for c in captures)
+
+        memories = [
+            m for book in books for m in MemoryRepository(session).list_for_media_item(book.id)
+        ]
+        assert memories
+
+    def test_re_seeding_does_not_duplicate_the_demo_capture(self, session: Session) -> None:
+        result = seed_demo_persona(session)
+        seed_demo_persona(session)
+
+        books = MediaItemRepository(session).list_for_user(result.user.id)
+        captures = [
+            c for book in books for c in CaptureRepository(session).list_for_media_item(book.id)
+        ]
+        assert len(captures) == 1
 
 
 class TestGetDemoLibrary:

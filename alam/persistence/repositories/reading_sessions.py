@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from alam.domain.reading_progress import compute_progress
 from alam.persistence.models.reading_session import ReadingSession, ReadingSessionStatus
 
 if TYPE_CHECKING:
@@ -80,3 +81,21 @@ class ReadingSessionRepository:
         reading_session.ended_at = dt.datetime.now(dt.UTC)
         self._session.flush()
         return reading_session
+
+    def resync_position(
+        self, *, structure_unit_id: uuid.UUID, ordinal: int, total_units: int
+    ) -> None:
+        """Repairs a session's denormalized position after structure
+        re-verification renumbers the unit it currently points at (ADR-0004,
+        ADR-0006). Called from ``services/structure_plan.py``. Recomputes
+        ``current_progress`` too, since ``total_units`` can itself change in
+        the same re-verification."""
+        progress = compute_progress(ordinal, total_units)
+        for reading_session in self._session.scalars(
+            select(ReadingSession).where(
+                ReadingSession.current_structure_unit_id == structure_unit_id
+            )
+        ):
+            reading_session.current_ordinal = ordinal
+            reading_session.current_progress = progress
+        self._session.flush()
