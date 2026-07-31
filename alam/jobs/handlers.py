@@ -33,6 +33,12 @@ _HANDLERS: dict[str, JobHandler] = {}
 
 NOOP = "noop"
 
+TRANSCRIBE_CAPTURE = "transcribe_capture"
+"""Job type enqueued by ``services.capture_submission``. The handler itself
+arrives in M2 session 2 — until it is registered, a job of this type fails
+with ``UnknownJobTypeError`` and retries out, which is fine for an
+in-progress milestone branch that never reaches production undrained."""
+
 
 def register(job_type: str, handler: JobHandler) -> None:
     if job_type in _HANDLERS:
