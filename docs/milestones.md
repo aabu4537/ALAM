@@ -18,8 +18,9 @@ out of scope — see `CLAUDE.md`.
 - `pytest`, `ruff`, `mypy --strict` on `domain/`; CI green on push
 - Provider Protocols for LLM, embeddings, and STT — **fake implementations only**,
   no real API calls
-- **Deployed:** web service and worker live on the real URL, health endpoint
-  responding
+- **Deployed:** web service live on the real URL, health endpoint responding,
+  queue drained by `pg_cron` on a bounded schedule rather than a standing
+  worker process (ADR-0007 supersedes the always-on worker in ADR-0005)
 
 Defining the provider Protocols with fakes in M0 is what makes every later
 milestone testable offline, with no API spend and no flaky tests. It also forces

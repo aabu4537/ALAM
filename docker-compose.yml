@@ -31,12 +31,13 @@ services:
       db:
         condition: service_healthy
 
-  # Separate process, same image — mirrors the split deployment in ADR-0005.
-  # The handler loop lands in Session 3; this service is wired now so the
-  # topology is real from the start rather than retrofitted.
+  # Local-only. Production has no standing worker (ADR-0007 — Supabase Cron
+  # drains the same web service instead). This profile exists so the loop and
+  # its concurrency behavior can still be exercised against a real Postgres
+  # locally without needing a second deployed process.
   worker:
     build: .
-    command: python -m alam.jobs.worker
+    command: python -m alam.jobs.loop
     environment:
       ALAM_DATABASE_URL: postgresql+psycopg://alam:alam@db:5432/alam
     env_file:
