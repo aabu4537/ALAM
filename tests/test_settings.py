@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from alam.config.settings import Settings
+from tests.conftest import _ENV_KEYS_EXEMPT_FROM_ISOLATION
 
 
 def test_the_environment_is_isolated() -> None:
@@ -14,7 +15,11 @@ def test_the_environment_is_isolated() -> None:
     Without this, an ambient ``ALAM_*`` variable silently changes what the
     tests below are asserting — which is how CI and local disagreed.
     """
-    assert [k for k in os.environ if k.startswith("ALAM_")] == []
+    leaked = [
+        k for k in os.environ if k.startswith("ALAM_") and k not in _ENV_KEYS_EXEMPT_FROM_ISOLATION
+    ]
+
+    assert leaked == []
 
 
 def test_defaults_are_usable_without_any_environment() -> None:

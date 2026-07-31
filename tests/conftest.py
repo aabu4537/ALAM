@@ -12,6 +12,17 @@ from alam.config.settings import Settings, get_settings
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+TEST_DATABASE_URL_ENV = "ALAM_TEST_DATABASE_URL"
+REQUIRE_DB_TESTS_ENV = "ALAM_REQUIRE_DB_TESTS"
+
+_ENV_KEYS_EXEMPT_FROM_ISOLATION = frozenset({TEST_DATABASE_URL_ENV, REQUIRE_DB_TESTS_ENV})
+"""Names the isolation fixture must not strip.
+
+These configure the test run itself rather than the application — one points at
+the throwaway test database, the other turns its absence into a failure. Both
+are read by fixtures, so clearing them would break the database tests outright.
+"""
+
 
 @pytest.fixture(autouse=True)
 def _isolate_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
@@ -31,6 +42,8 @@ def _isolate_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     Tests that want a value set it explicitly with ``monkeypatch.setenv``.
     """
     for key in [k for k in os.environ if k.startswith("ALAM_")]:
+        if key in _ENV_KEYS_EXEMPT_FROM_ISOLATION:
+            continue
         monkeypatch.delenv(key, raising=False)
 
     monkeypatch.setitem(Settings.model_config, "env_file", None)

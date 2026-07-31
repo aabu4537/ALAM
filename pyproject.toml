@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "structlog>=24.4",
+    "uuid6>=2024.7.10",
 ]
 
 [dependency-groups]
@@ -46,7 +47,21 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "TC", "RUF"]
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
     "pydantic_settings.BaseSettings",
+    # SQLAlchemy resolves Mapped[...] annotations at runtime to build the
+    # mapping, so a model's `uuid` / `datetime` imports cannot be deferred.
+    "sqlalchemy.orm.DeclarativeBase",
+    "alam.persistence.base.Base",
 ]
+runtime-evaluated-decorators = ["sqlalchemy.orm.declared_attr"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migrations are append-only history; a stale lint rule must never be a reason
+# to edit one that has already been applied.
+"alam/persistence/migrations/versions/*" = ["TC003", "E501"]
+# The mixins here carry Mapped[...] annotations but inherit from nothing, so
+# runtime-evaluated-base-classes cannot see them. Deferring these imports
+# breaks mapper configuration at import time.
+"alam/persistence/base.py" = ["TC003"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -71,3 +86,6 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 filterwarnings = ["error"]
+markers = [
+    "db: requires a live Postgres with pgvector (ALAM_TEST_DATABASE_URL)",
+]
