@@ -185,13 +185,19 @@ under `FakeLLM`.
 
 ## Consequences
 
-**Positive.** One artifact lifecycle, one staleness function, one Layer 3
-classifier, reused unchanged by every later M6 session (recommendations,
-briefings) rather than each session re-deriving its own version of
-"when is this cached and safe to serve." A `blocked_leaked` draft is never
-lost — it's on the row for audit — but is also never one response-model
-field away from an accidental leak, since the service raises instead of
-ever handing the row back to the router in that status.
+**Positive.** One artifact lifecycle and one staleness *shape*, reused by
+every later M6 session, rather than each session re-deriving its own
+version of "when is this cached and safe to serve" from nothing. (Amendment,
+M6 session 2: the Layer 3 classifier itself turned out not to generalize to
+every artifact type — recommendations have no excluded-content set to check
+a draft against, since they're library-wide with no ordinal and no
+`CatalogProvider` yet. ADR-0014 covers what recommendations use instead and
+why; Layer 3 is expected to apply again for briefings, session 4, once
+`CatalogProvider` gives them real book content an ordinal filter can
+exclude from.) A `blocked_leaked` draft is never lost — it's on the row for
+audit — but is also never one response-model field away from an accidental
+leak, since the service raises instead of ever handing the row back to the
+router in that status.
 
 **Negative.** Layer 3 adds a second LLM call and its own latency to every
 fresh generation, exactly the cost ADR-0002's "Negative consequences"

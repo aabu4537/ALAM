@@ -73,9 +73,10 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
     `preference_fact_evidence`; M5 session 1 adds `predictions` and
     `prediction_evidence` (evidence links to `memories`, not `content_chunks`
     — see ADR-0009); M5.5a adds `llm_calls`; M6 session 1 adds
-    `journey_summaries` (ADR-0013). `content_chunks` remains later
-    work — a stray table here means something was built ahead of the
-    chunking pipeline that doesn't exist yet (see ADR-0008)."""
+    `journey_summaries` (ADR-0013); M6 session 2 adds `recommendations`
+    (ADR-0014). `content_chunks` remains later work — a stray table here
+    means something was built ahead of the chunking pipeline that doesn't
+    exist yet (see ADR-0008)."""
     tables = set(
         session.scalars(
             text(
@@ -100,6 +101,7 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
         "prediction_evidence",
         "llm_calls",
         "journey_summaries",
+        "recommendations",
     }
 
 

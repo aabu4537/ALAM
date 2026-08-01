@@ -22,6 +22,7 @@ from alam.persistence.models.prediction_evidence import PredictionEvidence
 from alam.persistence.models.preference_fact import PreferenceFact
 from alam.persistence.models.preference_fact_evidence import PreferenceFactEvidence
 from alam.persistence.models.reading_session import ReadingSession, ReadingSessionStatus
+from alam.persistence.models.recommendation import Recommendation, RecommendationStatus
 from alam.persistence.models.user import User
 
 __all__ = [
@@ -46,6 +47,8 @@ __all__ = [
     "PreferenceFactEvidence",
     "ReadingSession",
     "ReadingSessionStatus",
+    "Recommendation",
+    "RecommendationStatus",
     "StructureUnitType",
     "User",
 ]

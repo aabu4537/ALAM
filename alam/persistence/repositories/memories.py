@@ -66,6 +66,19 @@ class MemoryRepository:
             .order_by(Memory.structure_ordinal, Memory.created_at)
         ).all()
 
+    def list_for_user(self, user_id: uuid.UUID) -> Sequence[Memory]:
+        """Every memory across every book this user has, oldest first — the
+        recommendations service's raw taste evidence (M6 session 2), same
+        join pattern as ``list_needing_consolidation``. Not ordinal-scoped
+        to one book, unlike ``list_for_media_item``: recommendations aren't
+        tied to a single ``ReaderContext``."""
+        return self._session.scalars(
+            select(Memory)
+            .join(MediaItem, MediaItem.id == Memory.media_item_id)
+            .where(MediaItem.user_id == user_id)
+            .order_by(Memory.created_at)
+        ).all()
+
     def list_in_ordinal_range(
         self, *, media_item_id: uuid.UUID, from_ordinal: int, to_ordinal: int
     ) -> Sequence[Memory]:
