@@ -19,18 +19,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from alam.jobs.job_types import CORRECT_TRANSCRIPT, EXTRACT_MEMORIES, NOOP, TRANSCRIBE_CAPTURE
+from alam.jobs.job_types import (
+    CORRECT_TRANSCRIPT,
+    EMBED_MEMORIES_BACKFILL,
+    EXTRACT_MEMORIES,
+    NOOP,
+    TRANSCRIBE_CAPTURE,
+)
 from alam.services.capture_pipeline import (
     correct_transcript,
     extract_memories,
     transcribe_capture,
 )
+from alam.services.embedding_backfill import embed_memories_backfill
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 __all__ = [
     "CORRECT_TRANSCRIPT",
+    "EMBED_MEMORIES_BACKFILL",
     "EXTRACT_MEMORIES",
     "NOOP",
     "TRANSCRIBE_CAPTURE",
@@ -88,3 +96,4 @@ register(NOOP, noop_handler)
 register(TRANSCRIBE_CAPTURE, transcribe_capture)
 register(CORRECT_TRANSCRIPT, correct_transcript)
 register(EXTRACT_MEMORIES, extract_memories)
+register(EMBED_MEMORIES_BACKFILL, embed_memories_backfill)

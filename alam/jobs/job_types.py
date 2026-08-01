@@ -22,3 +22,9 @@ exists. Chains to ``EXTRACT_MEMORIES`` on success."""
 EXTRACT_MEMORIES = "extract_memories"
 """Enqueued by the ``CORRECT_TRANSCRIPT`` handler once a corrected transcript
 exists. The last stage of the M2 capture pipeline."""
+
+EMBED_MEMORIES_BACKFILL = "embed_memories_backfill"
+"""Triggered on demand (POST /internal/embeddings/backfill), not chained from
+extraction — a one-time catch-up over existing memories, not the steady-state
+embedding of new ones (ADR-0008). Re-enqueues itself with an advanced cursor
+until the batch it claims comes back short of the configured size."""

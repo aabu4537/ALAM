@@ -8,6 +8,7 @@ span several repositories.
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
 from alam.persistence.repositories.memories import MemoryRepository
+from alam.persistence.repositories.memory_embeddings import MemoryEmbeddingRepository
 from alam.persistence.repositories.reading_sessions import ReadingSessionRepository
 from alam.persistence.repositories.structure_units import StructureUnitRepository
 from alam.persistence.repositories.users import UserRepository
@@ -15,6 +16,7 @@ from alam.persistence.repositories.users import UserRepository
 __all__ = [
     "CaptureRepository",
     "MediaItemRepository",
+    "MemoryEmbeddingRepository",
     "MemoryRepository",
     "ReadingSessionRepository",
     "StructureUnitRepository",
