@@ -28,7 +28,7 @@ class LocalEmbeddingProvider:
         self.version_name = "1"
         self._model = SentenceTransformer(model)
 
-        dimensions = self._model.get_sentence_embedding_dimension()
+        dimensions = self._model.get_embedding_dimension()
         if dimensions is None:
             raise ValueError(f"sentence-transformers model {model!r} reports no output dimension")
         self._dimensions: int = int(dimensions)
