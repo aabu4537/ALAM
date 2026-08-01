@@ -1,0 +1,27 @@
+"""CI wiring for the adversarial spoiler set (M3, ADR-0002 Layer 4).
+
+``leakage_rate`` is asserted at exactly 0.0. Layer 1 is a SQL predicate, not a
+model's probabilistic judgment — any leakage here means the ordinal filter
+itself broke, which must fail the build, not just get reported.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+from alam.eval.spoiler_eval import run_spoiler_eval
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+pytestmark = pytest.mark.db
+
+
+def test_adversarial_spoiler_set_has_zero_leakage(session: Session) -> None:
+    report = run_spoiler_eval(session)
+
+    leaked = [r for r in report.results if r.leaked]
+    assert not leaked, f"spoiler leakage in: {leaked}"
+    assert report.leakage_rate == 0.0
