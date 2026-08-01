@@ -91,6 +91,14 @@ class Settings(BaseSettings):
     how many batches that takes.
     """
 
+    # --- Retrieval (M3) ---
+    retrieval_candidate_limit: int = Field(default=20, ge=1)
+    """Rows fetched per branch (vector, full-text) before RRF fusion narrows
+    to the caller's requested limit. Wider than the final limit so a memory
+    that ranks well on only one axis still reaches the fusion step instead of
+    being cut before fusion ever sees it.
+    """
+
     # --- Providers ---
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"
