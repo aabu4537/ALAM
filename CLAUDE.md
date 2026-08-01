@@ -23,9 +23,21 @@ spoiler-safe insights, prediction resolutions, and recommendations.
 
 ## Current milestone
 
-**M3 — Memory and retrieval.** M0, M1, and M2 are complete.
+**M6 — Synthesis.** M0 through M5 are complete, plus two pieces of work done
+ahead of M6 rather than as part of it: real (paid, $0-gated, and local)
+providers with `llm_calls` instrumentation, and a `ReaderContext` hardening
+pass that closed spoiler-containment gaps in `/structure` and `/predictions`
+(ADR-0002 amendment, ADR-0012).
 
-Nothing outside the M3 definition of done in `docs/milestones.md` should be
+M6 was explicitly scoped down at its start, 2026-08-01, per
+`docs/milestones/M6-open-questions.md`: no agent (`docs/milestones.md`'s
+own invitation to reconsider rule 4 was declined directly, not by
+default — see that rule below), `media/base.py` stays deferred, no
+memory deletion/edit path. `content_chunks` / raw book text stays declined
+per ADR-0010; M6 reads `media_items.attributes`, `memories`,
+`preference_facts`, and `predictions` only.
+
+Nothing outside the M6 definition of done in `docs/milestones.md` should be
 implemented. If a task seems to require a later milestone's code, stop and say
 so rather than building it.
 
@@ -51,7 +63,11 @@ for a human decision.
 4. **No autonomous agent in V1.** The pipeline is deterministic:
    input → processing → retrieval → synthesis → memory update.
    Agents arrive when multiple knowledge sources make retrieval orchestration a
-   real problem, not before. See ADR-0001.
+   real problem, not before. See ADR-0001. Reaffirmed, not just carried over
+   by default, at M6's start (2026-08-01) — `docs/milestones.md` names M6 as
+   the point to reconsider this; asked directly, answered no. Revisit only if
+   a concrete orchestration problem shows up while building M6, not
+   speculatively.
 
 5. **No Celery, no Redis, no external broker.** The job queue is Postgres using
    `SELECT ... FOR UPDATE SKIP LOCKED`. Transactional enqueue is the point.
@@ -76,12 +92,13 @@ for a human decision.
 This list matters more than the feature list. A design document describing the
 whole system is in this repo; its presence is not permission to implement it.
 
-- Retrieval or RAG of any kind (M3)
-- Any agent, tool-calling loop, or LangGraph
-- Recommendations (M6)
-- Briefings or reading-journey synthesis (M6)
-- Prediction resolution (M5)
-- Profile consolidation (M4)
+- Any agent, tool-calling loop, or LangGraph (declined for M6 specifically,
+  not just still-pending — see rule 4)
+- `content_chunks` / raw book text ingestion or chunking (declined for M6 —
+  ADR-0010; revisit only for in-text Q&A over a specific chapter)
+- `media/base.py` / `MediaProvider` Protocol (deferred for M6 —
+  `docs/milestones/M6-open-questions.md` question 1)
+- Memory deletion or edit path (deferred for M6 — same doc, question 5)
 - Frontend beyond a health page (M7)
 - Any media type other than books
 - Caching layers, rate limiting, read replicas, sharding
