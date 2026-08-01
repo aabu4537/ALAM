@@ -24,15 +24,6 @@ dependencies = [
     "anthropic>=0.120.2",
     "openai>=2.52.0",
     "httpx>=0.28.1",
-    # Local ($0) counterparts (M5.5a task 2). Ollama reuses the openai
-    # client above via a base-url override, no new dependency. These two
-    # do add real weight — sentence-transformers pulls in torch
-    # (~100MB+ download, ~400MB+ installed) and faster-whisper pulls in
-    # ctranslate2 — because both run inference in-process rather than
-    # against a server. Named explicitly for this milestone; flagged here
-    # rather than added quietly.
-    "sentence-transformers>=5.6.1",
-    "faster-whisper>=1.2.1",
     # Validates a fake provider's canned response against response_schema
     # (schema-constrained decoding, follow-up to M5.5a) — a fake must not
     # be able to return a shape no real, schema-constrained provider could.
@@ -40,6 +31,26 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Local ($0) providers (M5.5a task 2), split out of [project.dependencies]
+# rather than added there directly — found only while merging this branch,
+# when the requirements.txt CI check and the Vercel preview build both
+# picked up the newly-heavy dependency tree. Ollama itself reuses the
+# openai client above via a base-url override, no new dependency; these two
+# do add real weight — sentence-transformers pulls in torch (~100MB+
+# download, ~400MB+ installed) and faster-whisper pulls in ctranslate2 —
+# because both run inference in-process rather than against a server.
+# `requirements.txt` is generated with no `--group` flag (see its own CI
+# job), so this group is excluded from it by construction: Vercel's Python
+# builder installs from requirements.txt, and the deployed instance runs on
+# fakes only (ALLOW_PAID_PROVIDERS unset, ALAM_*_PROVIDER=fake) and never
+# imports these modules — see the README's "runs on fakes only" limitation,
+# which described this constraint before the dependency declaration actually
+# enforced it. `uv sync --all-groups` (CI's lint/typecheck/test jobs) and the
+# Dockerfile's explicit `--group local` still install it.
+local = [
+    "sentence-transformers>=5.6.1",
+    "faster-whisper>=1.2.1",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
@@ -50,6 +61,15 @@ dev = [
     "mypy>=1.14",
     "types-jsonschema>=4.26.0.20260518",
 ]
+
+[tool.uv]
+# Without this, uv treats every group in [dependency-groups] as "default" —
+# a bare `uv sync` or `uv export` would pull in `local` (torch,
+# ctranslate2) same as `dev`. Restricting the default to `dev` means `local`
+# only installs when asked for (`--group local` or `--all-groups`), which is
+# what makes `requirements.txt`'s CI regeneration (`--no-dev`, no `--group`
+# flag) exclude it without needing its own `--no-group local` flag.
+default-groups = ["dev"]
 
 [build-system]
 requires = ["hatchling"]
