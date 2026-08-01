@@ -15,6 +15,12 @@ at first call.
 (M5.5a) so every ``.complete()`` call is recorded to ``llm_calls``, from
 this one choke point, without any of the four call sites needing to know
 instrumentation exists.
+
+Every resolver also checks ``PAID_PROVIDER_KINDS`` before doing anything
+else (M5.5a task 1) — selecting a paid vendor name is not, by itself,
+enough to reach it. ``ALAM_ALLOW_PAID_PROVIDERS`` must also be true. The $0
+constraint lives here, in code that runs on every resolution, not in
+anyone's memory of which settings to leave alone.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ from alam.ai.providers.fakes import (
 from alam.ai.providers.instrumentation import InstrumentedLLMProvider
 from alam.ai.providers.llm import Completion, LLMProvider
 from alam.ai.providers.stt import SpeechToTextProvider, Transcript
-from alam.config.settings import get_settings
+from alam.config.settings import PAID_PROVIDER_KINDS, get_settings
 
 if TYPE_CHECKING:
     from alam.config.settings import Settings
@@ -46,6 +52,7 @@ __all__ = [
     "InstrumentedLLMProvider",
     "LLMProvider",
     "ProviderError",
+    "ProviderNotPermittedError",
     "SpeechToTextProvider",
     "Transcript",
     "get_embedding_provider",
@@ -54,8 +61,27 @@ __all__ = [
 ]
 
 
+class ProviderNotPermittedError(RuntimeError):
+    """A paid provider kind is configured but ``ALAM_ALLOW_PAID_PROVIDERS``
+    is not set (M5.5a task 1). Fails closed: the default is refusal, not a
+    warning that spend is about to happen."""
+
+
+def _require_paid_providers_allowed(*, setting_name: str, kind: str, allowed: bool) -> None:
+    if kind in PAID_PROVIDER_KINDS and not allowed:
+        raise ProviderNotPermittedError(
+            f"{setting_name}={kind!r} is a paid provider. Set "
+            "ALAM_ALLOW_PAID_PROVIDERS=true to enable it — this may incur real cost."
+        )
+
+
 def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
     settings = settings or get_settings()
+    _require_paid_providers_allowed(
+        setting_name="llm_provider",
+        kind=settings.llm_provider,
+        allowed=settings.allow_paid_providers,
+    )
     if settings.llm_provider == "fake":
         return InstrumentedLLMProvider(FakeLLM())
     if settings.llm_provider == "anthropic":
@@ -76,6 +102,11 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
 
 def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:
     settings = settings or get_settings()
+    _require_paid_providers_allowed(
+        setting_name="embedding_provider",
+        kind=settings.embedding_provider,
+        allowed=settings.allow_paid_providers,
+    )
     if settings.embedding_provider == "fake":
         return FakeEmbeddingProvider()
     if settings.embedding_provider == "voyage":
@@ -91,6 +122,11 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
 
 def get_stt_provider(settings: Settings | None = None) -> SpeechToTextProvider:
     settings = settings or get_settings()
+    _require_paid_providers_allowed(
+        setting_name="stt_provider",
+        kind=settings.stt_provider,
+        allowed=settings.allow_paid_providers,
+    )
     if settings.stt_provider == "fake":
         return FakeSpeechToText()
     if settings.stt_provider == "openai":

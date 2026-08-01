@@ -29,6 +29,13 @@ def test_defaults_are_usable_without_any_environment() -> None:
     assert settings.job_max_attempts == 5
 
 
+def test_allow_paid_providers_defaults_to_false() -> None:
+    """The $0 constraint (M5.5a task 1) is enforced by this default, not by
+    memory. This test exists specifically so that a future edit flipping it
+    breaks CI loudly rather than quietly opening a paid path."""
+    assert Settings().allow_paid_providers is False
+
+
 def test_env_prefix_is_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALAM_ENV", "production")
     monkeypatch.setenv("ALAM_JOB_MAX_ATTEMPTS", "9")

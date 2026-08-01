@@ -24,6 +24,13 @@ providers have disjoint real vendors, and a shared ``ProviderKind`` would let
 anything. CLAUDE.md rule 8: provider access goes through a Protocol either
 way, so this only constrains which vendor name is even legal in config."""
 
+PAID_PROVIDER_KINDS: frozenset[str] = frozenset({"anthropic", "voyage", "openai"})
+"""Every provider kind that can spend real money (M5.5a task 1). Checked
+against whichever of ``llm_provider`` / ``embedding_provider`` / ``stt_provider``
+is being resolved — the names don't overlap across the three, so one set
+covers all of them. Gated by ``allow_paid_providers``, independent of local
+kinds added later (ollama, local, faster_whisper), which never appear here."""
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -131,6 +138,17 @@ class Settings(BaseSettings):
     llm_provider: LLMProviderKind = "fake"
     embedding_provider: EmbeddingProviderKind = "fake"
     stt_provider: SttProviderKind = "fake"
+
+    allow_paid_providers: bool = False
+    """Fail-closed gate on every kind in ``PAID_PROVIDER_KINDS`` (M5.5a task
+    1). Selecting ``anthropic``/``voyage``/``openai`` in the fields above is
+    not enough by itself to reach a paid API — this must also be true. The
+    $0 constraint is enforced here, in code, rather than relied on as
+    something a person remembers to check before setting a provider kind.
+    Default is False; ``tests/test_settings.py`` asserts that specifically,
+    so a future edit to this default breaks CI loudly rather than silently
+    opening the gate.
+    """
 
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-4-5-20250929"

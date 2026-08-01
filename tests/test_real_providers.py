@@ -18,6 +18,7 @@ from alam.ai.providers import (
     EmbeddingProvider,
     InstrumentedLLMProvider,
     LLMProvider,
+    ProviderNotPermittedError,
     SpeechToTextProvider,
     get_embedding_provider,
     get_llm_provider,
@@ -66,12 +67,52 @@ class TestConstructionRequiresNoNetwork:
             VoyageEmbeddingProvider(api_key="sk-test", model="voyage-nonexistent")
 
 
-class TestResolversWireUpRealProviders:
-    """Settings -> resolver -> concrete instance. Never calls the provider —
-    that's the network call this test suite cannot make."""
+class TestPaidProviderGuard:
+    """The $0 constraint (M5.5a task 1): a paid provider kind alone is not
+    enough to reach it — ALAM_ALLOW_PAID_PROVIDERS must also be true.
+    Default is false, so every paid kind must be refused with no other
+    configuration at all.
+
+    Built with ``model_construct`` rather than the normal constructor —
+    deliberately not setting the matching ``*_API_KEY``, since the guard
+    must fire before the credential-requirement validator ever runs. The
+    point under test is that the provider is unreachable, not merely
+    misconfigured.
+    """
+
+    def test_llm_provider_anthropic_is_refused_by_default(self) -> None:
+        settings = Settings.model_construct(llm_provider="anthropic")
+
+        with pytest.raises(ProviderNotPermittedError, match="ALAM_ALLOW_PAID_PROVIDERS"):
+            get_llm_provider(settings)
+
+    def test_embedding_provider_voyage_is_refused_by_default(self) -> None:
+        settings = Settings.model_construct(embedding_provider="voyage")
+
+        with pytest.raises(ProviderNotPermittedError, match="ALAM_ALLOW_PAID_PROVIDERS"):
+            get_embedding_provider(settings)
+
+    def test_stt_provider_openai_is_refused_by_default(self) -> None:
+        settings = Settings.model_construct(stt_provider="openai")
+
+        with pytest.raises(ProviderNotPermittedError, match="ALAM_ALLOW_PAID_PROVIDERS"):
+            get_stt_provider(settings)
+
+    def test_the_error_names_the_configured_field_and_value(self) -> None:
+        settings = Settings.model_construct(llm_provider="anthropic")
+
+        with pytest.raises(ProviderNotPermittedError, match="llm_provider='anthropic'"):
+            get_llm_provider(settings)
+
+
+class TestResolversWireUpRealProvidersWhenExplicitlyAllowed:
+    """Settings -> resolver -> concrete instance, with the paid gate opened
+    on purpose. Never calls the provider — that's the network call this
+    test suite cannot make."""
 
     def test_llm_provider_anthropic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ALAM_LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("ALAM_ALLOW_PAID_PROVIDERS", "true")
         monkeypatch.setenv("ALAM_ANTHROPIC_API_KEY", "sk-test")
         settings = Settings()
 
@@ -83,6 +124,7 @@ class TestResolversWireUpRealProviders:
 
     def test_embedding_provider_voyage(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ALAM_EMBEDDING_PROVIDER", "voyage")
+        monkeypatch.setenv("ALAM_ALLOW_PAID_PROVIDERS", "true")
         monkeypatch.setenv("ALAM_VOYAGE_API_KEY", "sk-test")
         settings = Settings()
 
@@ -93,6 +135,7 @@ class TestResolversWireUpRealProviders:
 
     def test_stt_provider_openai(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ALAM_STT_PROVIDER", "openai")
+        monkeypatch.setenv("ALAM_ALLOW_PAID_PROVIDERS", "true")
         monkeypatch.setenv("ALAM_OPENAI_API_KEY", "sk-test")
         settings = Settings()
 
