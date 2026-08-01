@@ -9,12 +9,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from fastapi.testclient import TestClient
 
 from alam.ai.extraction.memories import ExtractedMemory
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
 from alam.ai.providers.fakes import FakeEmbeddingProvider
-from alam.api.main import create_app
 from alam.persistence.repositories import (
     CaptureRepository,
     MediaItemRepository,
@@ -24,30 +22,12 @@ from alam.persistence.repositories import (
     StructureUnitRepository,
     UserRepository,
 )
-from alam.persistence.session import session_scope
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
+    from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session
 
     from alam.persistence.models import MediaItem, Memory, User
-
-
-@pytest.fixture
-def client(session: Session) -> Iterator[TestClient]:
-    """The app, with ``session_scope`` overridden to hand out this test's own
-    rolled-back session rather than opening a second, uncoordinated one
-    against the real engine."""
-
-    def _session_override() -> Iterator[Session]:
-        yield session
-
-    app = create_app()
-    app.dependency_overrides[session_scope] = _session_override
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture

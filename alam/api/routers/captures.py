@@ -31,6 +31,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from alam.ai.retrieval.hybrid import DEFAULT_LIMIT, retrieve_memories
+from alam.api.dependencies import reader_context_dependency
+from alam.domain.spoiler_filter import is_visible
 from alam.persistence.models.reading_session import ReadingSessionStatus
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
@@ -42,15 +44,12 @@ from alam.services.capture_submission import (
     submit_capture,
 )
 from alam.services.epub_ingestion import UnknownMediaItemError
-from alam.services.reading_sessions import (
-    UnknownReadingSessionError,
-    end_reading_session,
-    get_reader_context,
-)
+from alam.services.reading_sessions import UnknownReadingSessionError, end_reading_session
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+    from alam.domain.reader_context import ReaderContext
     from alam.persistence.models import Capture, Memory, ReadingSession
 
 router = APIRouter(prefix="/books/{media_item_id}", tags=["captures"])
@@ -165,15 +164,24 @@ async def create_capture(
 
 @router.get("/captures/{capture_id}", response_model=CaptureResponse)
 def get_capture(
-    media_item_id: uuid.UUID, capture_id: uuid.UUID, session: Session = Depends(session_scope)
+    media_item_id: uuid.UUID,
+    capture_id: uuid.UUID,
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
 ) -> CaptureResponse:
-    owner = UserRepository(session).get_owner()
-    item = MediaItemRepository(session).get(media_item_id) if owner else None
-    if item is None or owner is None or item.user_id != owner.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
-
+    """A capture past the reader's current position 404s exactly like one
+    that doesn't exist — a re-reader whose client still holds a capture id
+    from a prior, further-along read must not be able to fetch its content
+    back out early by asking for it directly."""
     capture = CaptureRepository(session).get(capture_id)
-    if capture is None or capture.media_item_id != media_item_id:
+    if (
+        capture is None
+        or capture.media_item_id != media_item_id
+        or not is_visible(
+            structure_ordinal=capture.structure_ordinal,
+            current_ordinal=reader_context.current_ordinal,
+        )
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="capture not found")
 
     return _capture_response(capture)
@@ -226,23 +234,14 @@ def end_session(
 
 @router.get("/memories", response_model=list[MemoryResponse])
 def search_memories(
-    media_item_id: uuid.UUID,
     query: str,
     limit: int = DEFAULT_LIMIT,
     session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
 ) -> list[MemoryResponse]:
     """Spoiler-safe hybrid search (M3, ADR-0002) over the owner's active
     reading position — the first production caller of ``retrieve_memories``.
-    ``current_ordinal`` is never a request parameter; ``get_reader_context``
+    ``current_ordinal`` is never a request parameter; ``reader_context_dependency``
     resolves it from the media item's active reading session."""
-    owner = UserRepository(session).get_owner()
-    if owner is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
-
-    try:
-        reader_context = get_reader_context(session, user_id=owner.id, media_item_id=media_item_id)
-    except UnknownReadingSessionError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-
     memories = retrieve_memories(session, reader_context, query=query, limit=limit)
     return [_memory_response(memory) for memory in memories]
