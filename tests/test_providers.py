@@ -14,6 +14,7 @@ from alam.ai.providers import (
     FakeEmbeddingProvider,
     FakeLLM,
     FakeSpeechToText,
+    InstrumentedLLMProvider,
     LLMProvider,
     ProviderError,
     SpeechToTextProvider,
@@ -32,7 +33,12 @@ class TestProtocolConformance:
         assert isinstance(FakeSpeechToText(), SpeechToTextProvider)
 
     def test_resolvers_return_the_fakes(self) -> None:
-        assert isinstance(get_llm_provider(), FakeLLM)
+        """``get_llm_provider()`` wraps the fake in ``InstrumentedLLMProvider``
+        (M5.5a) — the underlying fake is still what actually answers, just
+        not what the resolver hands back directly."""
+        llm = get_llm_provider()
+        assert isinstance(llm, InstrumentedLLMProvider)
+        assert isinstance(llm.inner, FakeLLM)
         assert isinstance(get_embedding_provider(), FakeEmbeddingProvider)
         assert isinstance(get_stt_provider(), FakeSpeechToText)
 

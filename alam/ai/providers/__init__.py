@@ -5,10 +5,16 @@ Protocol here (CLAUDE.md rule 8). Callers depend on the Protocol, never on a
 concrete client, which is what lets every later milestone be tested offline
 with no API spend and no flaky tests.
 
-M0 ships fakes only. The resolvers below are the single place a real
-implementation gets wired in, and ``ProviderKind`` in ``config/settings.py``
-currently permits only ``"fake"`` — so a real provider configured before one
-exists fails at startup rather than at first call.
+The resolvers below are the single place a real implementation gets wired
+in, and ``LLMProviderKind`` / ``EmbeddingProviderKind`` / ``SttProviderKind``
+in ``config/settings.py`` constrain which vendor name is even legal — so a
+real provider misconfigured before one exists fails at startup rather than
+at first call.
+
+``get_llm_provider()`` wraps its result in ``InstrumentedLLMProvider``
+(M5.5a) so every ``.complete()`` call is recorded to ``llm_calls``, from
+this one choke point, without any of the four call sites needing to know
+instrumentation exists.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from alam.ai.providers.fakes import (
     FakeSpeechToText,
     ProviderError,
 )
+from alam.ai.providers.instrumentation import InstrumentedLLMProvider
 from alam.ai.providers.llm import Completion, LLMProvider
 from alam.ai.providers.stt import SpeechToTextProvider, Transcript
 from alam.config.settings import get_settings
@@ -36,6 +43,7 @@ __all__ = [
     "FakeEmbeddingProvider",
     "FakeLLM",
     "FakeSpeechToText",
+    "InstrumentedLLMProvider",
     "LLMProvider",
     "ProviderError",
     "SpeechToTextProvider",
@@ -49,7 +57,7 @@ __all__ = [
 def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
     settings = settings or get_settings()
     if settings.llm_provider == "fake":
-        return FakeLLM()
+        return InstrumentedLLMProvider(FakeLLM())
     raise ValueError(f"unknown llm provider: {settings.llm_provider!r}")
 
 
