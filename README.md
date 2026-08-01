@@ -142,12 +142,12 @@ alam/
   domain/         Pure functions. No I/O. mypy --strict.
   services/       Orchestration across domain + persistence + ai.
   ai/
-    providers/    LLM / embedding / STT Protocols + fakes.
+    providers/    LLM / embedding / STT Protocols + fakes, real (paid,
+                  gated behind ALLOW_PAID_PROVIDERS), and local (M5.5a).
     prompts/      Versioned prompt templates.
     extraction/   Transcript -> typed memories.
     retrieval/    (M3)
   media/
-    base.py       MediaProvider Protocol.
     books/        The one implementation.
   persistence/    SQLAlchemy models, repositories, Alembic migrations.
   jobs/           Queue, worker loop, handlers.
@@ -316,7 +316,7 @@ which none of the schema assertions executed.
 ```bash
 createdb alam_test
 export ALAM_TEST_DATABASE_URL=postgresql+psycopg://$(whoami)@localhost:5432/alam_test
-uv run pytest                    # 295 tests; without the variable, 134 skip
+uv run pytest                    # 487 tests; without the variable, 229 skip
 ```
 
 Migrations run against `ALAM_DATABASE_URL`:
