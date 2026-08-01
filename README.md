@@ -11,7 +11,7 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 through M3 complete.** Deployed and live at
+> **Status: M0 through M4 complete.** Deployed and live at
 > [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
 > yet (that's M7), but the API is real:
 >
@@ -36,8 +36,8 @@ flowchart LR
     A["🎙️ Voice reflection<br/><i>book + chapter selected<br/>at record time</i>"] --> B["Transcription<br/><i>+ entity-biased correction</i>"]
     B --> C["Extraction<br/><i>one capture →<br/>many typed memories</i>"]
     C --> D[("Episodic memory<br/><code>memories</code>")]
-    D --> E["Nightly<br/>consolidation<br/><i>M4</i>"]
-    E --> F[("Preference profile<br/><code>preference_facts</code><br/><i>M4</i>")]
+    D --> E["Weekly<br/>consolidation"]
+    E --> F[("Preference profile<br/><code>preference_facts</code>")]
     D --> G{"Retrieval<br/><i>ordinal-filtered · M3</i>"}
     F --> H["Synthesis<br/><i>briefings · predictions ·<br/>recommendations · M6</i>"]
     G --> H
@@ -48,8 +48,8 @@ flowchart LR
     style F fill:#8957e5,color:#fff,stroke:none
 ```
 
-**A through D are real** as of M2 — a raw-audio API, not a recording UI (that's
-M7); everything from E onward is still ahead. The pipeline is **deterministic**
+**A through F are real** as of M4 — a raw-audio API, not a recording UI
+(that's M7); H (synthesis) is still ahead. The pipeline is **deterministic**
 — input → processing → retrieval → synthesis → memory update. There is no
 autonomous agent in V1. Agents are reconsidered at M6, when multiple knowledge
 sources make retrieval orchestration a real problem rather than a decoration
@@ -226,7 +226,8 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /books/{id}/reading-sessions/active` | The book's current session — chapter, ordinal, normalized progress (ADR-0004). |
 | `POST /books/{id}/reading-sessions/{id}/end` | Marks a session `completed` or `abandoned` — a DNF is a preference signal, never deleted. |
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
-| `POST /internal/jobs/drain`, `/internal/demo/seed` | Ops-only, bearer-secret protected. |
+| `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
+| `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
 — each independently retryable on the M0 queue rather than one long request.
@@ -244,7 +245,7 @@ a PWA in M7.
 | **M1** | Import and structure — Goodreads CSV, EPUB, chapter verification | ✅ done |
 | **M2** | Capture and voice — transcription, entity correction, extraction (PWA recording UI deferred to M7) | ✅ done |
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ✅ done |
-| **M4** | Profile — consolidation, confidence decay, supersede logic | ⬜ |
+| **M4** | Profile — weekly consolidation, confidence decay, supersede logic, taste drift view | ✅ done |
 | **M5** | Predictions — lifecycle, resolution windows, evidence linking | ⬜ |
 | **M6** | Synthesis — briefings, journey summaries, recommendations | ⬜ |
 | **M7** | Polish — frontend, token/cost accounting, README with real numbers | ⬜ |
