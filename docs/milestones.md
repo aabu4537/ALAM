@@ -126,11 +126,20 @@ without one.
 - Spoiler-safe pre-book briefings
 - Reading journey summaries
 - Recommendations with explanations
-- **Reconsider an agent here.** By M6 there are multiple knowledge sources —
-  memories, book text, profile, external metadata, prior recommendations — and
-  deciding what to retrieve becomes a real orchestration problem. An agent
-  introduced because the data demanded it is a better decision than one present
-  from the start.
+- ~~**Reconsider an agent here.**~~ **Resolved, 2026-08-01: no.** Explicitly
+  decided against, not just deferred by default — asked directly at M6's
+  start, given CLAUDE.md rule 4 marks "no autonomous agent in V1" as a
+  settled decision this milestone was named as the place to revisit. M6
+  stays the deterministic pipeline (input → processing → retrieval →
+  synthesis → memory update), same shape as M0-M5. Revisit only if a
+  concrete orchestration problem actually shows up while building M6, not
+  speculatively.
+- No `content_chunks` / raw book text — declined for M6, see
+  [ADR-0010](adr/0010-no-content-chunk-storage.md). Knowledge sources are
+  `media_items.attributes`, `memories` (via `retrieve_memories`),
+  `preference_facts` (via `get_taste_drift`), `predictions` (via
+  `list_predictions_for_book`) — all four already exist and are
+  `ReaderContext`-scoped where relevant.
 
 ---
 
