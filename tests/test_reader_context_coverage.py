@@ -85,6 +85,15 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
         "ReaderContext to construct. Mitigated at the prompt level (write a "
         "general statement, not a memory restatement), not structurally"
     ),
+    ("GET", "/recommendations"): (
+        "M6 session 2 recommendations are library-wide by design, same as "
+        "taste-drift above — not scoped to any single media_item_id or "
+        "ordinal, so there is no ReaderContext to construct. Spoiler risk "
+        "here isn't ordinal-shaped either: mitigated structurally by the "
+        "response schema having no field an LLM-authored characterization "
+        "of a candidate's content could occupy, not by ReaderContext "
+        "(ADR-0014)"
+    ),
 }
 
 

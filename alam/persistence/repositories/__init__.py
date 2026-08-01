@@ -14,6 +14,7 @@ from alam.persistence.repositories.memory_embeddings import MemoryEmbeddingRepos
 from alam.persistence.repositories.predictions import PredictionRepository
 from alam.persistence.repositories.preference_facts import PreferenceFactRepository
 from alam.persistence.repositories.reading_sessions import ReadingSessionRepository
+from alam.persistence.repositories.recommendations import RecommendationRepository
 from alam.persistence.repositories.retrieval import RetrievalRepository
 from alam.persistence.repositories.structure_units import StructureUnitRepository
 from alam.persistence.repositories.users import UserRepository
@@ -28,6 +29,7 @@ __all__ = [
     "PredictionRepository",
     "PreferenceFactRepository",
     "ReadingSessionRepository",
+    "RecommendationRepository",
     "RetrievalRepository",
     "StructureUnitRepository",
     "UserRepository",

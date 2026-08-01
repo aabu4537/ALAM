@@ -86,6 +86,27 @@ class SpoilerEvalReport:
 
 
 @dataclass(frozen=True)
+class GroundednessCaseResult:
+    label: str
+    ungrounded: bool
+    ungrounded_citation_ids: tuple[str, ...]
+    """Non-empty only when ``ungrounded`` — the cited ids that didn't exist
+    or didn't belong to the reader."""
+
+
+@dataclass(frozen=True)
+class RecommendationGroundednessReport:
+    ungrounded_rate: float
+    """M6 session 2's headline number (ADR-0014), parallel to
+    ``SpoilerEvalReport.leakage_rate``. ``recommendation_groundedness`` has
+    no "leaked" framing to inherit — a recommendation isn't unsafe because
+    it leaked excluded content, it's unsafe because a claim doesn't
+    actually trace back to anything the reader said or was observed to
+    believe."""
+    results: tuple[GroundednessCaseResult, ...]
+
+
+@dataclass(frozen=True)
 class ExtractionCase:
     label: str
     transcript: str
