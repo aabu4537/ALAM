@@ -14,8 +14,8 @@ env:
   UV_FROZEN: "0"
 
 jobs:
-  # Split into three jobs on purpose: a red X should say which of lint,
-  # types, or behaviour broke without opening the log.
+  # Split into jobs on purpose: a red X should say which of lint, types,
+  # behaviour, or a stale generated file broke without opening the log.
   lint:
     name: ruff
     runs-on: ubuntu-latest
@@ -88,3 +88,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: build image
         run: docker build -t alam:ci .
+
+  requirements:
+    name: requirements.txt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # requirements.txt is generated, not hand-maintained (see its own
+      # header) — for tooling that reads requirements.txt and not uv.lock's
+      # TOML, e.g. GitHub's dependency graph. The build itself installs
+      # straight from uv.lock and never reads this file. It existed
+      # uncommitted-to-CI since M0 and had already drifted onto a uv flag
+      # that no longer exists (`--format requirements-txt`) by the time this
+      # check was added — exactly the failure mode it exists to catch.
+      - name: regenerate and diff
+        run: |
+          uv export --format requirements.txt --no-dev --no-emit-project -o requirements.txt
+          git diff --exit-code requirements.txt

@@ -44,9 +44,17 @@ class Capture(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     structure_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    audio_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    audio_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
     """Raw audio bytes. No blob store exists yet (no caller needs one) — short
-    voice reflections fit comfortably in a bytea column."""
+    voice reflections fit comfortably in a bytea column.
+
+    ``deferred=True``: a plain ``select(Capture)`` / ``session.get(Capture,
+    id)`` does not fetch this column. Every status/transcript read path
+    (list-for-book, capture-detail, the transcribe/correct/extract handlers'
+    own lookups before they need the bytes) would otherwise pull the blob
+    across the wire for rows that never touch it. Accessing the attribute
+    still works — SQLAlchemy issues a second query lazily the first time it's
+    read — this only changes what an ordinary read pulls by default."""
 
     status: Mapped[CaptureStatus] = mapped_column(
         Enum(

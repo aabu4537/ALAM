@@ -9,6 +9,11 @@ The demo seed endpoint is the same shape (public URL, shared secret, fails
 closed when unconfigured) for a different reason: it writes data, and an open
 write endpoint is a spam vector even though the data it writes is fixed and
 harmless.
+
+The embeddings backfill endpoint reuses the drain secret rather than getting
+its own. It enqueues jobs, the same blast radius as draining the queue it
+enqueues them onto — unlike the demo seed endpoint, it writes nothing a
+caller could see or spam beyond what the queue itself already bounds.
 """
 
 from __future__ import annotations
@@ -20,6 +25,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from alam.config.settings import Settings, get_settings
+from alam.jobs.job_types import EMBED_MEMORIES_BACKFILL
+from alam.jobs.queue import JobQueue
 from alam.jobs.runner import drain
 from alam.persistence.session import get_session_factory, session_scope
 from alam.services.demo_persona import seed_demo_persona
@@ -129,3 +136,27 @@ def seed_demo(session: Session = Depends(session_scope)) -> DemoSeedResponse:
     return DemoSeedResponse(
         created=list(result.created_book_titles), skipped=list(result.skipped_book_titles)
     )
+
+
+class EmbeddingBackfillResponse(BaseModel):
+    enqueued: bool
+
+
+@router.post(
+    "/embeddings/backfill",
+    response_model=EmbeddingBackfillResponse,
+    dependencies=[Depends(require_drain_secret)],
+)
+def trigger_embedding_backfill(
+    session: Session = Depends(session_scope),
+) -> EmbeddingBackfillResponse:
+    """Enqueues the first batch job; the drain schedule does the rest.
+
+    Idempotent to call repeatedly: `list_needing_embedding` only ever selects
+    memories still missing an embedding for the current model/version, so a
+    second call while one backfill is already in flight — or after it has
+    finished — costs one query and enqueues nothing wasteful in the second
+    case, and simply resumes coverage in the first (ADR-0008).
+    """
+    JobQueue(session).enqueue(job_type=EMBED_MEMORIES_BACKFILL, payload={"after_id": None})
+    return EmbeddingBackfillResponse(enqueued=True)

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from alam.persistence.models.memory import Memory, MemoryType
+from alam.persistence.models.memory_embedding import MemoryEmbedding
 
 if TYPE_CHECKING:
     import uuid
@@ -72,3 +73,29 @@ class MemoryRepository:
         ):
             memory.structure_ordinal = ordinal
         self._session.flush()
+
+    def list_needing_embedding(
+        self,
+        *,
+        embedding_model: str,
+        embedding_version: str,
+        after_id: uuid.UUID | None,
+        limit: int,
+    ) -> Sequence[Memory]:
+        """The backfill's batch query (ADR-0008): memories with no
+        ``memory_embeddings`` row yet for this exact model/version, ordered
+        by id — UUIDv7 is time-ordered, so ``id`` doubles as a stable,
+        resumable cursor without a separate sequence column."""
+        missing = ~(
+            select(MemoryEmbedding.id)
+            .where(
+                MemoryEmbedding.memory_id == Memory.id,
+                MemoryEmbedding.embedding_model == embedding_model,
+                MemoryEmbedding.embedding_version == embedding_version,
+            )
+            .exists()
+        )
+        stmt = select(Memory).where(missing).order_by(Memory.id).limit(limit)
+        if after_id is not None:
+            stmt = stmt.where(Memory.id > after_id)
+        return self._session.scalars(stmt).all()

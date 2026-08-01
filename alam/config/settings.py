@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     default as the drain secret.
     """
 
+    embedding_backfill_batch_size: int = Field(default=50, ge=1)
+    """Memories processed per backfill job invocation (ADR-0008). Bounds one
+    invocation's work so it fits comfortably inside a single drain, not the
+    reason it can be interrupted safely — the job's own re-enqueue-with-
+    cursor design is what makes a kill mid-run resumable. This just tunes
+    how many batches that takes.
+    """
+
     # --- Providers ---
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"

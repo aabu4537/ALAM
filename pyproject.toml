@@ -13,6 +13,9 @@ dependencies = [
     "pydantic-settings>=2.7",
     "structlog>=24.4",
     "uuid6>=2024.7.10",
+    # SQLAlchemy Vector type for the pgvector extension already enabled at M0.
+    # See ADR-0008 for why the column it maps is unconstrained (no fixed N).
+    "pgvector>=0.3",
 ]
 
 [dependency-groups]
