@@ -10,11 +10,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alam.jobs import handlers
+from alam.jobs.context import current_job_id
 from alam.jobs.queue import JobQueue
 from alam.jobs.runner import drain
 from alam.persistence.models.job import Job, JobStatus
 
 if TYPE_CHECKING:
+    import uuid
     from collections.abc import Iterator
 
     from sqlalchemy.engine import Engine
@@ -27,10 +29,10 @@ NOOP = handlers.NOOP
 @pytest.fixture
 def factory(migrated_engine: Engine) -> Iterator[sessionmaker[Session]]:
     with migrated_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE jobs"))
+        conn.execute(text("TRUNCATE TABLE jobs CASCADE"))
     yield sessionmaker(bind=migrated_engine, expire_on_commit=False)
     with migrated_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE jobs"))
+        conn.execute(text("TRUNCATE TABLE jobs CASCADE"))
 
 
 @pytest.fixture
@@ -267,3 +269,50 @@ class TestSuccessPath:
         result = drain(factory, max_jobs=5, budget_seconds=10, lease_seconds=60)
 
         assert result.claimed == 5
+
+
+class TestJobIdContext:
+    """current_job_id (M5.5a) — set for the duration of a handler call so
+    code running underneath it (the LLM instrumentation wrapper) can
+    attribute what it records, without the handler signature knowing about
+    it."""
+
+    def test_current_job_id_is_set_for_the_duration_of_the_handler(
+        self, factory: sessionmaker[Session], temp_handler: Any
+    ) -> None:
+        seen: list[uuid.UUID | None] = []
+
+        def record_job_id(session: Session, payload: dict[str, Any]) -> None:
+            seen.append(current_job_id.get())
+
+        job_type = temp_handler("record_job_id", record_job_id)
+        _enqueue(factory, job_type=job_type)
+
+        drain(factory, max_jobs=1, budget_seconds=10, lease_seconds=60)
+
+        with factory() as session:
+            job_id = session.execute(text("SELECT id FROM jobs")).scalar_one()
+
+        assert seen == [job_id]
+
+    def test_current_job_id_is_reset_after_the_handler_succeeds(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        _enqueue(factory)
+
+        drain(factory, max_jobs=1, budget_seconds=10, lease_seconds=60)
+
+        assert current_job_id.get() is None
+
+    def test_current_job_id_is_reset_even_if_the_handler_fails(
+        self, factory: sessionmaker[Session], temp_handler: Any
+    ) -> None:
+        def boom(session: Session, payload: dict[str, Any]) -> None:
+            raise RuntimeError("boom")
+
+        job_type = temp_handler("boom_for_context", boom)
+        _enqueue(factory, job_type=job_type)
+
+        drain(factory, max_jobs=1, budget_seconds=10, lease_seconds=60)
+
+        assert current_job_id.get() is None

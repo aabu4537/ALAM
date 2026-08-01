@@ -252,7 +252,7 @@ class TestExtractMemories:
         extract_memories(session, {"capture_id": str(capture.id)})
 
         memory = MemoryRepository(session).list_for_capture(capture.id)[0]
-        assert memory.prompt_version_id == "extract-memories-v1"
+        assert memory.prompt_version_id == "extract-memories-v2"
 
     def test_an_empty_extraction_is_valid_and_produces_no_memories(
         self, session: Session, capture: Capture, monkeypatch: pytest.MonkeyPatch

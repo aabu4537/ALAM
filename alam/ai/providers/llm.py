@@ -6,13 +6,31 @@ the cheapest way to make that hold is to make it impossible to obtain a
 completion without naming one. The provider does not invent it — the caller
 owns the prompt template and its version — and the response carries it back so
 whatever persists the output already has it in hand.
+
+``response_schema`` (follow-up to M5.5a) is an optional JSON Schema dict a
+caller passes when it wants the response constrained to a specific shape,
+not just asked for one in prose. Each provider satisfies it with whatever
+native mechanism it has — Ollama's ``format`` parameter (via
+``response_format={"type":"json_schema",...}`` on its OpenAI-compatible
+endpoint), Anthropic's forced tool-use, OpenAI's ``response_format`` — so
+``Completion.text`` is still always a plain string; how it got
+schema-constrained is the provider's business, not the caller's. ``None``
+means "no constraint," the same free-text behavior every caller had before
+this existed. Extraction is the first (and, as of this change, only) real
+caller — see ``ai/extraction/memories.py``'s ``EXTRACTION_RESPONSE_SCHEMA``.
 """
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+import json
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+import jsonschema
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import Any
 
 
 class Completion(BaseModel):
@@ -41,12 +59,11 @@ class Completion(BaseModel):
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    """Text in, text out.
-
-    Deliberately narrow. Structured/JSON output is what M2 extraction will
-    want, and it is left out until that caller exists — guessing the shape now
-    is how you get the wrong abstraction (ADR-0003's reasoning, applied to a
-    different seam).
+    """Text in, text out — optionally shape-constrained via
+    ``response_schema``. Was "deliberately narrow" with structured output
+    left out until a real caller existed (ADR-0003's reasoning about
+    guessing the wrong abstraction, applied to this seam); extraction is
+    now that caller.
     """
 
     @property
@@ -59,4 +76,32 @@ class LLMProvider(Protocol):
         prompt_version_id: str,
         max_tokens: int | None = None,
         temperature: float = 0.0,
+        response_schema: Mapping[str, Any] | None = None,
     ) -> Completion: ...
+
+
+class SchemaValidationError(ValueError):
+    """A fake's canned response doesn't conform to the ``response_schema``
+    the caller asked for. A fake must not be able to return a shape no real
+    provider, constrained by the same schema, could ever produce — silently
+    accepting a non-conforming canned response would make a test pass
+    against a shape production can't reach.
+    """
+
+
+def validate_against_schema(text: str, schema: Mapping[str, Any]) -> None:
+    """Raises ``SchemaValidationError`` if ``text`` isn't JSON matching
+    ``schema``. Used by fake providers only (M5.5a follow-up) — real
+    providers rely on their own constrained-decoding mechanism instead of
+    a second, client-side check of output they didn't choose the shape of."""
+    try:
+        instance = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SchemaValidationError(f"canned response is not valid JSON: {exc}") from exc
+
+    try:
+        jsonschema.validate(instance=instance, schema=schema)
+    except jsonschema.ValidationError as exc:
+        raise SchemaValidationError(
+            f"canned response does not conform to response_schema: {exc.message}"
+        ) from exc

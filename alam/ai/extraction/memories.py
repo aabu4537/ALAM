@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import enum
 import json
+from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 
 class MemoryType(enum.StrEnum):
@@ -34,6 +35,15 @@ class ExtractedMemory(BaseModel):
 
     memory_type: MemoryType
     content: str
+
+
+EXTRACTION_RESPONSE_SCHEMA: dict[str, Any] = TypeAdapter(list[ExtractedMemory]).json_schema()
+"""The JSON Schema a schema-constrained provider is given for extraction
+(follow-up to M5.5a) — generated from ``ExtractedMemory`` itself, not
+hand-written, so the schema a provider is constrained to and the schema
+``parse_extraction_response`` below expects can never drift apart. An empty
+array is valid against this schema (no minItems), matching the prompt's own
+"most transcripts yield one or two memories... return [] if none apply"."""
 
 
 class ExtractionError(ValueError):

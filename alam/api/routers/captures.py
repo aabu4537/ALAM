@@ -1,4 +1,5 @@
-"""Capture submission and reading-session lifecycle (ADR-0004, M2 session 1).
+"""Capture submission, reading-session lifecycle (ADR-0004, M2 session 1), and
+memory search (M3 retrieval's first production caller).
 
 Submitting a capture is what advances (or starts) the book's active reading
 session — there is no separate "select chapter" step, matching the ADR's
@@ -8,6 +9,10 @@ bytes, not multipart, same tradeoff as the Goodreads/EPUB routers.
 Transcription and extraction happen out of band via the job queue enqueued
 here; a capture's ``status`` starts and stays ``pending`` until M2 session 2's
 handler is registered.
+
+``GET .../memories`` never takes an ordinal from the request — it resolves
+one server-side via ``services.reading_sessions.get_reader_context``, so a
+client cannot ask to see past its own reading position.
 """
 
 from __future__ import annotations
@@ -25,6 +30,9 @@ from typing import TYPE_CHECKING, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
+from alam.ai.retrieval.hybrid import DEFAULT_LIMIT, retrieve_memories
+from alam.api.dependencies import reader_context_dependency
+from alam.domain.spoiler_filter import is_visible
 from alam.persistence.models.reading_session import ReadingSessionStatus
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
@@ -41,7 +49,8 @@ from alam.services.reading_sessions import UnknownReadingSessionError, end_readi
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from alam.persistence.models import Capture, ReadingSession
+    from alam.domain.reader_context import ReaderContext
+    from alam.persistence.models import Capture, Memory, ReadingSession
 
 router = APIRouter(prefix="/books/{media_item_id}", tags=["captures"])
 
@@ -76,6 +85,14 @@ class CaptureResponse(BaseModel):
     created_at: dt.datetime
 
 
+class MemoryResponse(BaseModel):
+    id: str
+    memory_type: str
+    content: str
+    structure_ordinal: int
+    created_at: dt.datetime
+
+
 def _reading_session_response(reading_session: ReadingSession) -> ReadingSessionResponse:
     return ReadingSessionResponse(
         id=str(reading_session.id),
@@ -100,6 +117,16 @@ def _capture_response(capture: Capture) -> CaptureResponse:
         raw_transcript=capture.raw_transcript,
         corrected_transcript=capture.corrected_transcript,
         created_at=capture.created_at,
+    )
+
+
+def _memory_response(memory: Memory) -> MemoryResponse:
+    return MemoryResponse(
+        id=str(memory.id),
+        memory_type=memory.memory_type.value,
+        content=memory.content,
+        structure_ordinal=memory.structure_ordinal,
+        created_at=memory.created_at,
     )
 
 
@@ -137,15 +164,24 @@ async def create_capture(
 
 @router.get("/captures/{capture_id}", response_model=CaptureResponse)
 def get_capture(
-    media_item_id: uuid.UUID, capture_id: uuid.UUID, session: Session = Depends(session_scope)
+    media_item_id: uuid.UUID,
+    capture_id: uuid.UUID,
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
 ) -> CaptureResponse:
-    owner = UserRepository(session).get_owner()
-    item = MediaItemRepository(session).get(media_item_id) if owner else None
-    if item is None or owner is None or item.user_id != owner.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
-
+    """A capture past the reader's current position 404s exactly like one
+    that doesn't exist — a re-reader whose client still holds a capture id
+    from a prior, further-along read must not be able to fetch its content
+    back out early by asking for it directly."""
     capture = CaptureRepository(session).get(capture_id)
-    if capture is None or capture.media_item_id != media_item_id:
+    if (
+        capture is None
+        or capture.media_item_id != media_item_id
+        or not is_visible(
+            structure_ordinal=capture.structure_ordinal,
+            current_ordinal=reader_context.current_ordinal,
+        )
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="capture not found")
 
     return _capture_response(capture)
@@ -194,3 +230,18 @@ def end_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     return _reading_session_response(reading_session)
+
+
+@router.get("/memories", response_model=list[MemoryResponse])
+def search_memories(
+    query: str,
+    limit: int = DEFAULT_LIMIT,
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
+) -> list[MemoryResponse]:
+    """Spoiler-safe hybrid search (M3, ADR-0002) over the owner's active
+    reading position — the first production caller of ``retrieve_memories``.
+    ``current_ordinal`` is never a request parameter; ``reader_context_dependency``
+    resolves it from the media item's active reading session."""
+    memories = retrieve_memories(session, reader_context, query=query, limit=limit)
+    return [_memory_response(memory) for memory in memories]

@@ -7,6 +7,26 @@ web service row, the worker process row, and the "no free tier that spins down"
 rule. The PWA on Vercel, Postgres and Storage on Supabase, deploy-at-M0, and
 demo mode as a first-class requirement all still stand.
 
+## Implementation status (as of 2026-08-01)
+
+**Decided and implemented, accurately:** everything this ADR actually
+decided — `jobs.claimed_at`/`lease_expires_at`, the reclaim predicate, the
+bounded `drain(max_jobs, budget_seconds)` shape, `POST /internal/jobs/drain`
+behind a bearer secret, `NullPool` + `prepare_threshold=None` under the
+transaction pooler, migrations run from CI rather than in-function. All
+verified directly against `jobs/runner.py`, `jobs/queue.py`,
+`persistence/session.py`, and `.github/workflows/migrate.yml`.
+
+**Inherited claims this ADR didn't verify and reality has since
+contradicted:** the "still stand" list above (carried from ADR-0005)
+includes "Postgres and Storage on Supabase." Postgres, yes. Storage, no —
+audio is a `LargeBinary` column in Postgres itself
+(`captures.audio_data`), not Supabase Storage; see ADR-0005's own
+implementation-status note. "The PWA on Vercel" also still stands only as
+an intention — no PWA exists yet (M7). Neither gap originates in this
+ADR's own decision; both are cases of restating an earlier ADR's claim
+without re-checking it against what actually got built.
+
 ## Context
 
 The deployment target changed to **Vercel + Supabase**, and M0 must be

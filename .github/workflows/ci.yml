@@ -99,12 +99,20 @@ jobs:
           enable-cache: true
       # requirements.txt is generated, not hand-maintained (see its own
       # header) — for tooling that reads requirements.txt and not uv.lock's
-      # TOML, e.g. GitHub's dependency graph. The build itself installs
-      # straight from uv.lock and never reads this file. It existed
-      # uncommitted-to-CI since M0 and had already drifted onto a uv flag
-      # that no longer exists (`--format requirements-txt`) by the time this
-      # check was added — exactly the failure mode it exists to catch.
+      # TOML, e.g. GitHub's dependency graph, AND for Vercel's Python
+      # builder, which installs from this file directly (api/index.py is
+      # its detected entrypoint). It existed uncommitted-to-CI since M0 and
+      # had already drifted onto a uv flag that no longer exists (`--format
+      # requirements-txt`) by the time this check was added — exactly the
+      # failure mode it exists to catch.
+      #
+      # `--no-group local` is load-bearing, not redundant with `--no-dev`:
+      # `uv export` includes every dependency-groups entry by default
+      # regardless of `[tool.uv] default-groups` (that setting only affects
+      # `uv sync`), so without it this file — and Vercel's build — would
+      # pull in the local ($0) providers' torch/ctranslate2 dependency tree,
+      # which the deployed instance never imports (it runs on fakes only).
       - name: regenerate and diff
         run: |
-          uv export --format requirements.txt --no-dev --no-emit-project -o requirements.txt
+          uv export --format requirements.txt --no-dev --no-group local --no-emit-project -o requirements.txt
           git diff --exit-code requirements.txt

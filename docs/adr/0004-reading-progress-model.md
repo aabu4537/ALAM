@@ -3,6 +3,23 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
+## Implementation status (as of 2026-08-01)
+
+**Decided and implemented:** everything about progress capture and
+structure verification — the recording-flow capture, the ordinal +
+normalized-float storage on `reading_sessions`, and the full five-step
+EPUB ingestion/verification flow (`services/epub_ingestion.py`,
+`services/structure_verification.py`, `domain/structure_review.py`).
+Sessions separate from media items with `abandoned` as first-class status
+is real (`ReadingSessionStatus`).
+
+**One stale reference:** step 5 of the ingestion flow ("assign final
+ordinals and index content chunks") and the alternatives section both
+assume `content_chunks` — which, per ADR-0008/ADR-0010, was never built.
+Ordinal assignment happens; chunk indexing does not, because there is
+nothing to index yet. Same underlying gap as ADR-0002's Layer 1/ADR-0009,
+noted here rather than re-explained.
+
 ## Context
 
 Progress is the backbone of the system. Spoiler filtering, memory watermarks,

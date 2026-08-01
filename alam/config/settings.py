@@ -15,9 +15,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "ci", "staging", "production"]
 LogFormat = Literal["json", "console"]
-ProviderKind = Literal["fake"]
-"""M0 ships fakes only. Real provider names join this union when they exist —
-see CLAUDE.md rule 8."""
+LLMProviderKind = Literal["fake", "anthropic", "ollama"]
+EmbeddingProviderKind = Literal["fake", "voyage", "local"]
+SttProviderKind = Literal["fake", "openai", "faster_whisper"]
+"""One union per provider kind, not one shared union (M5.5a) — the three
+providers have disjoint real vendors, and a shared ``ProviderKind`` would let
+``ALAM_LLM_PROVIDER=voyage`` type-check as valid when it can never resolve to
+anything. CLAUDE.md rule 8: provider access goes through a Protocol either
+way, so this only constrains which vendor name is even legal in config.
+
+``ollama`` / ``local`` / ``faster_whisper`` (task 2) are the $0 local
+counterparts and deliberately absent from ``PAID_PROVIDER_KINDS`` below —
+they need no credential and no ``ALAM_ALLOW_PAID_PROVIDERS`` gate."""
+
+PAID_PROVIDER_KINDS: frozenset[str] = frozenset({"anthropic", "voyage", "openai"})
+"""Every provider kind that can spend real money (M5.5a task 1). Checked
+against whichever of ``llm_provider`` / ``embedding_provider`` / ``stt_provider``
+is being resolved — the names don't overlap across the three, so one set
+covers all of them. Gated by ``allow_paid_providers``, independent of local
+kinds added later (ollama, local, faster_whisper), which never appear here."""
 
 
 class Settings(BaseSettings):
@@ -123,9 +139,62 @@ class Settings(BaseSettings):
     """
 
     # --- Providers ---
-    llm_provider: ProviderKind = "fake"
-    embedding_provider: ProviderKind = "fake"
-    stt_provider: ProviderKind = "fake"
+    llm_provider: LLMProviderKind = "fake"
+    embedding_provider: EmbeddingProviderKind = "fake"
+    stt_provider: SttProviderKind = "fake"
+
+    allow_paid_providers: bool = False
+    """Fail-closed gate on every kind in ``PAID_PROVIDER_KINDS`` (M5.5a task
+    1). Selecting ``anthropic``/``voyage``/``openai`` in the fields above is
+    not enough by itself to reach a paid API — this must also be true. The
+    $0 constraint is enforced here, in code, rather than relied on as
+    something a person remembers to check before setting a provider kind.
+    Default is False; ``tests/test_settings.py`` asserts that specifically,
+    so a future edit to this default breaks CI loudly rather than silently
+    opening the gate.
+    """
+
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+    """Verify this against Anthropic's current model list before relying on
+    it — model ids are retired on a schedule this file cannot track for you.
+    """
+
+    voyage_api_key: SecretStr | None = None
+    voyage_model: str = "voyage-3"
+
+    openai_api_key: SecretStr | None = None
+    """Used only for the Whisper STT endpoint (M5.5a) — not an LLM or
+    embedding vendor here. A separate ``openai`` LLM/embedding backend is
+    something to add later, not implied by this key's presence."""
+
+    whisper_model: str = "whisper-1"
+
+    # --- Local providers (M5.5a task 2) ---
+    # $0, no credential, no ALAM_ALLOW_PAID_PROVIDERS gate. Not tested by
+    # the unit test suite (rule 8) — constructing any of these can hit the
+    # network on a cache-miss (pulling a model), so they're exercised only
+    # by the eval harness, run manually, never by pytest.
+    ollama_base_url: str = "http://localhost:11434/v1"
+    """Ollama's OpenAI-compatible endpoint. Reuses the ``openai`` SDK
+    already installed for Whisper (task 3) with this as ``base_url`` —
+    verified against the installed SDK version to work as a plain
+    base-url override, no parallel HTTP client written for this."""
+    ollama_model: str = "llama3.2"
+    """Must already be pulled locally (``ollama pull llama3.2``) — this
+    provider never pulls a model itself. Verify this tag still exists in
+    Ollama's current library before relying on the default."""
+
+    local_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    """A sentence-transformers model id, downloaded from Hugging Face on
+    first use and cached under ``~/.cache`` thereafter — the one-time
+    download is real network I/O, which is exactly why this provider is
+    never constructed by the test suite."""
+
+    faster_whisper_model: str = "small.en"
+    faster_whisper_compute_type: str = "int8"
+    """CPU-friendly quantization — no GPU assumed for a personal dev
+    machine."""
 
     @field_validator("database_url")
     @classmethod
@@ -156,6 +225,25 @@ class Settings(BaseSettings):
                 f"job_lease_seconds ({self.job_lease_seconds}) must exceed "
                 f"drain_budget_seconds ({self.drain_budget_seconds}), or a job "
                 f"can be reclaimed while it is still running"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _real_providers_require_credentials(self) -> Settings:
+        """A provider selected without its credential should fail at
+        startup, the same way an unknown provider name already does —
+        not at the first request that happens to call it (M5.5a)."""
+        missing = []
+        if self.llm_provider == "anthropic" and self.anthropic_api_key is None:
+            missing.append("ALAM_ANTHROPIC_API_KEY")
+        if self.embedding_provider == "voyage" and self.voyage_api_key is None:
+            missing.append("ALAM_VOYAGE_API_KEY")
+        if self.stt_provider == "openai" and self.openai_api_key is None:
+            missing.append("ALAM_OPENAI_API_KEY")
+
+        if missing:
+            raise ValueError(
+                "missing required credentials for the configured provider(s): " + ", ".join(missing)
             )
         return self
 

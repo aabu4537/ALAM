@@ -2,27 +2,37 @@
 4 / docs/milestones.md's "Evaluation harness").
 
 Runs the exact prompt-build -> LLM -> parse pipeline ``services/
-capture_pipeline.py`` uses in production, not a reimplementation of it, so a
-prompt-wording regression shows up here too.
+capture_pipeline.py`` uses in production, not a reimplementation of it,
+including ``response_schema`` (M5.5a follow-up task 1/3) — so a
+prompt-wording regression or a schema drift shows up here too.
 
 **Not a real quality signal while ``ALAM_LLM_PROVIDER=fake``.** ``FakeLLM``
 has no extraction capability — with no queued response it returns a
-deterministic non-JSON string, which fails to parse on every case. That is
-the honest result of running this harness against a provider with no
-judgment to measure, not a bug in the harness. This module exists so the
-dataset format, the pipeline wiring, and the CI job are in place; the
-accuracy number only means something once a real ``LLMProvider`` exists
-(CLAUDE.md rule 8) — see ADR-0002's rejection of claiming a guarantee that
-doesn't hold.
+deterministic non-JSON string, which fails ``response_schema`` validation
+on every case (``SchemaValidationError``, treated the same as
+``ExtractionError`` below — a fake with nothing to offer and a real
+provider that returned nonsense are the same failure from this harness's
+point of view). That is the honest result of running this harness against
+a provider with no judgment to measure, not a bug in the harness. This
+module exists so the dataset format, the pipeline wiring, and the CI job
+are in place; the accuracy number only means something once a real
+``LLMProvider`` exists (CLAUDE.md rule 8) — see ADR-0002's rejection of
+claiming a guarantee that doesn't hold.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from alam.ai.extraction.memories import ExtractedMemory, ExtractionError, parse_extraction_response
+from alam.ai.extraction.memories import (
+    EXTRACTION_RESPONSE_SCHEMA,
+    ExtractedMemory,
+    ExtractionError,
+    parse_extraction_response,
+)
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
 from alam.ai.prompts.extraction import PROMPT_VERSION_ID, build_extraction_prompt
+from alam.ai.providers.llm import SchemaValidationError
 from alam.eval.models import ExtractionCase, ExtractionCaseResult, ExtractionEvalReport
 
 if TYPE_CHECKING:
@@ -94,12 +104,16 @@ def run_extraction_eval(
     results = []
     for case in cases:
         prompt = build_extraction_prompt(case.transcript)
-        completion = llm.complete(prompt, prompt_version_id=PROMPT_VERSION_ID)
-
         expected_types = _expected_types(case.expected)
+
         try:
+            completion = llm.complete(
+                prompt,
+                prompt_version_id=PROMPT_VERSION_ID,
+                response_schema=EXTRACTION_RESPONSE_SCHEMA,
+            )
             actual = parse_extraction_response(completion.text)
-        except ExtractionError as exc:
+        except (SchemaValidationError, ExtractionError) as exc:
             results.append(
                 ExtractionCaseResult(
                     label=case.label,
@@ -123,4 +137,14 @@ def run_extraction_eval(
         )
 
     accuracy = sum(1 for r in results if r.correct) / len(results) if results else 0.0
-    return ExtractionEvalReport(accuracy=accuracy, results=tuple(results))
+
+    parsed = [r for r in results if r.error is None]
+    parse_success_rate = len(parsed) / len(results) if results else 0.0
+    type_accuracy = sum(1 for r in parsed if r.correct) / len(parsed) if parsed else None
+
+    return ExtractionEvalReport(
+        accuracy=accuracy,
+        parse_success_rate=parse_success_rate,
+        type_accuracy=type_accuracy,
+        results=tuple(results),
+    )

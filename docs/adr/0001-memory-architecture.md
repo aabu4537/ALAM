@@ -3,6 +3,23 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
+## Implementation status (as of 2026-08-01)
+
+**Decided and implemented:** L2 (the `memories` table, fixed enum with the
+`other` escape hatch, embedding + tsvector columns) and L3 (`preference_facts`,
+weekly consolidation, confidence decay/reinforcement, supersede chains with
+`superseded_at` never deleting a row) — all built and tested (M2–M4).
+
+**Decided, never reified as a component:** L1, "working memory." Nothing in
+the codebase names or implements a distinct L1 concept — there is no table,
+service, or module called out as "working memory." Whatever the current
+session's context amounts to lives implicitly in `reading_sessions` and
+request-scoped state, not as a tier with its own storage or access pattern
+the way L2 and L3 have. Not necessarily wrong (a request's own context may
+never need to be a first-class thing), but this ADR presents three tiers as
+built on equal footing, and only two of them are actually identifiable
+system components.
+
 ## Context
 
 ALAM's central claim is that it remembers and connects the user's thoughts over

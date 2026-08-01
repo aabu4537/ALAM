@@ -8,6 +8,7 @@ migrations.
 from alam.persistence.base import Base
 from alam.persistence.models.capture import Capture, CaptureStatus
 from alam.persistence.models.job import Job, JobStatus
+from alam.persistence.models.llm_call import LLMCall
 from alam.persistence.models.media_item import MediaItem, MediaType
 from alam.persistence.models.media_structure_unit import (
     MediaStructureUnit,
@@ -28,6 +29,7 @@ __all__ = [
     "CaptureStatus",
     "Job",
     "JobStatus",
+    "LLMCall",
     "MediaItem",
     "MediaStructureUnit",
     "MediaType",

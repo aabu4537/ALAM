@@ -12,7 +12,11 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from alam.ai.extraction.memories import ExtractionError, parse_extraction_response
+from alam.ai.extraction.memories import (
+    EXTRACTION_RESPONSE_SCHEMA,
+    ExtractionError,
+    parse_extraction_response,
+)
 from alam.ai.prompts.entity_correction import (
     PROMPT_VERSION_ID as CORRECTION_PROMPT_VERSION_ID,
 )
@@ -22,6 +26,7 @@ from alam.ai.prompts.extraction import (
 )
 from alam.ai.prompts.extraction import build_extraction_prompt
 from alam.ai.providers import get_llm_provider, get_stt_provider
+from alam.ai.providers.llm import SchemaValidationError
 from alam.config.settings import get_settings
 from alam.domain.entity_bias import book_entity_list
 from alam.jobs.job_types import CORRECT_TRANSCRIPT, EXTRACT_MEMORIES
@@ -108,11 +113,14 @@ def extract_memories(session: Session, payload: dict[str, Any]) -> None:
 
     llm = get_llm_provider()
     prompt = build_extraction_prompt(capture.corrected_transcript)
-    completion = llm.complete(prompt, prompt_version_id=EXTRACTION_PROMPT_VERSION_ID)
-
     try:
+        completion = llm.complete(
+            prompt,
+            prompt_version_id=EXTRACTION_PROMPT_VERSION_ID,
+            response_schema=EXTRACTION_RESPONSE_SCHEMA,
+        )
         extracted = parse_extraction_response(completion.text)
-    except ExtractionError as exc:
+    except (SchemaValidationError, ExtractionError) as exc:
         raise CapturePipelineError(f"capture {capture.id}: {exc}") from exc
 
     memories = MemoryRepository(session).create_many(

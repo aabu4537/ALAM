@@ -99,9 +99,10 @@ class ExtractionCaseResult:
     expected_types: tuple[str, ...]
     actual_types: tuple[str, ...]
     error: str | None
-    """Set when the provider's response failed to parse at all — a stronger
-    failure than a type mismatch, reported separately rather than folded into
-    a wrong-answer bucket."""
+    """Set when the provider's response failed to parse at all, or (M5.5a
+    follow-up) failed ``response_schema`` validation before parsing was even
+    attempted — either way, a stronger failure than a type mismatch,
+    reported separately rather than folded into a wrong-answer bucket."""
 
 
 @dataclass(frozen=True)
@@ -112,8 +113,30 @@ class ExtractionEvalReport:
     not scored — judging paraphrase quality needs a semantic comparison this
     harness does not attempt.
 
+    Conflates two different failures into one number (M5.5a follow-up task
+    3, found by diagnosing a 0.0 that turned out to mean "nothing was even
+    assessable," not "everything was assessed and wrong"): a case whose
+    response failed to parse at all scores identically to a case that
+    parsed but got the wrong types. ``parse_success_rate`` and
+    ``type_accuracy`` below exist to separate those two claims; ``accuracy``
+    is kept, unchanged, as the single number that still answers "did the
+    pipeline produce the right typed memories end to end."
+
     NOT a real quality signal while ``ALAM_LLM_PROVIDER=fake``: FakeLLM has no
     extraction capability, so this number reflects the harness's own plumbing,
     not any model's judgment. Meaningful only once a real LLM provider exists.
     """
+    parse_success_rate: float
+    """Fraction of cases whose response parsed into valid ``ExtractedMemory``
+    objects at all — regardless of whether the content extracted was
+    correct. A case that fails here never reaches a memory_type comparison,
+    which is exactly what ``accuracy`` alone can't tell you."""
+    type_accuracy: float | None
+    """Of the cases that *did* parse, the fraction whose memory_type
+    multiset matched expected — "of what we could actually judge, how much
+    was right," as opposed to ``accuracy``'s "of everything, including cases
+    we couldn't judge at all." ``None``, not ``0.0``, when zero cases
+    parsed — there is nothing to compute a rate over, and collapsing that
+    into ``0.0`` would silently recreate the exact ambiguity this field
+    exists to remove."""
     results: tuple[ExtractionCaseResult, ...]

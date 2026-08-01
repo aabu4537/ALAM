@@ -33,10 +33,10 @@ NOOP = "noop"
 def clean_jobs(migrated_engine: Engine) -> Iterator[Engine]:
     """Committed state, truncated either side. Not rolled back."""
     with migrated_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE jobs"))
+        conn.execute(text("TRUNCATE TABLE jobs CASCADE"))
     yield migrated_engine
     with migrated_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE jobs"))
+        conn.execute(text("TRUNCATE TABLE jobs CASCADE"))
 
 
 class TestConcurrentClaiming:

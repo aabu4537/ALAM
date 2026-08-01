@@ -9,12 +9,16 @@ COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
 
 WORKDIR /app
 
-# Dependency layer, cached independently of source changes.
+# Dependency layer, cached independently of source changes. `--group local`
+# is explicit because it isn't a default uv group (see pyproject.toml) — this
+# is the local-dev image (docker-compose.yml), not the Vercel production
+# path, so it keeps installing the local ($0) providers same as before they
+# were split out of the base dependency list.
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project --no-dev 2>/dev/null || uv sync --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev --group local 2>/dev/null || uv sync --no-install-project --no-dev --group local
 
 COPY . .
-RUN uv sync --no-editable --no-dev 2>/dev/null || true
+RUN uv sync --no-editable --no-dev --group local 2>/dev/null || true
 
 ENV PATH="/app/.venv/bin:$PATH"
 

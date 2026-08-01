@@ -3,6 +3,36 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
+## Implementation status (as of 2026-08-01)
+
+**Superseded in part by [ADR-0007](0007-serverless-worker-execution.md)**,
+which already says so for the FastAPI web service row, the worker process
+row, and the "no free tier that spins down" rule. This section covers what
+ADR-0007 didn't: gaps between what both ADRs describe and what actually
+got built.
+
+**Decided, implemented differently:** the "FastAPI web service" row names
+Render or Fly.io. It runs on Vercel instead, as `api/index.py` — the same
+platform ADR-0007 assumed only the PWA and the drain trigger would touch.
+There is no `render.yaml` or `fly.toml` anywhere in the repo. Nowhere is
+"FastAPI moved onto Vercel too" written down as a decision; it's simply
+what `vercel.json` shows. **Audio blobs are stored directly in Postgres**
+(`captures.audio_data`, a `LargeBinary` column — see `alam/persistence/models/capture.py`),
+not in Supabase Storage as this row states. This is a real, undocumented
+decision, not a deferred one — it's already how the system behaves.
+
+**Decided, not implemented:** the Next.js PWA (M7, not started — see
+`docs/milestones.md`) and demo mode as a public-facing surface (`GET
+/demo/books` exists and is real, but the "precomputed rather than live
+inference" framing here describes a public launch posture for M6 that
+hasn't arrived; today it's a backend endpoint with no frontend consuming
+it, reachable but not "public" in the sense this ADR means).
+
+**Decided and implemented, accurately:** the owner/demo `user_id`
+separation (CLAUDE.md rule 9, enforced in every owner-scoped route via
+`UserRepository.get_owner()`), and deploying continuously from M0 rather
+than big-bang.
+
 ## Context
 
 ALAM must be publicly reachable — it is a portfolio artifact as well as a

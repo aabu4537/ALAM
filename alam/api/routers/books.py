@@ -1,10 +1,23 @@
-"""EPUB ingestion and structure verification endpoints (ADR-0004).
+"""EPUB ingestion, structure verification, and reading-time endpoints
+(ADR-0004; ADR-0002 amendment for the two structure reads).
 
 ``/epub/preview`` only parses — no database access, no owner resolution,
 nothing written. ``/epub/commit`` persists the parsed proposal as an
-*unverified* structure hypothesis. ``GET .../structure`` reads whatever is
-currently persisted, verified or not. ``PUT .../structure`` applies the
-human's corrections and is the only path that marks the item verified.
+*unverified* structure hypothesis.
+
+``GET .../structure`` and ``GET .../chapters`` are deliberately two routes,
+not one with a mode switch, because they serve two audiences with opposite
+needs: ``.../structure`` is the one-time pre-reading verification read — the
+full, unfiltered unit list including ``first_lines`` (raw book prose), so a
+human can confirm chapter boundaries before anything is indexed — and it
+refuses once verification is complete, since nothing about reviewing
+chapter boundaries is still a legitimate reason to read the whole book's
+opening lines on demand after that point. ``.../chapters`` is the
+reading-time read: ordinal-scoped via ``ReaderContext``, and ``first_lines``
+is not a field either response shares — it is structurally absent from
+``.../chapters``' response model, not filtered out of a shared one.
+``PUT .../structure`` applies the human's corrections and is the only path
+that marks the item verified.
 
 The EPUB body is raw bytes, not a multipart upload — same tradeoff as the
 Goodreads import router: avoids adding `python-multipart` for a single
@@ -19,6 +32,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
+from alam.api.dependencies import reader_context_dependency
 from alam.domain.structure_review import DesiredUnit, StructurePlanError
 from alam.media.books.epub import EpubParseError
 from alam.persistence.repositories.media_items import MediaItemRepository
@@ -28,10 +42,12 @@ from alam.persistence.session import session_scope
 from alam.services.epub_ingestion import UnknownMediaItemError, commit_epub, preview_epub
 from alam.services.predictions import list_predictions_for_book
 from alam.services.structure_verification import verify_structure
+from alam.services.structure_visibility import list_visible_structure_units
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+    from alam.domain.reader_context import ReaderContext
     from alam.media.books.epub import ParsedEpub
     from alam.persistence.models import MediaItem, MediaStructureUnit
 
@@ -64,6 +80,22 @@ class BookStructureResponse(BaseModel):
     title: str
     structure_verified: bool
     units: list[StructureUnitResponse]
+
+
+class VisibleStructureUnitResponse(BaseModel):
+    id: str
+    ordinal: int
+    label: str
+    # Deliberately no `first_lines` field — see the module docstring. This is
+    # not the same shape as `StructureUnitResponse` with a field omitted at
+    # serialization time; it is a distinct model that never carries raw book
+    # prose, so there is no "forgot to strip it" failure mode.
+
+
+class VisibleStructureResponse(BaseModel):
+    media_item_id: str
+    title: str
+    units: list[VisibleStructureUnitResponse]
 
 
 class DesiredUnitRequest(BaseModel):
@@ -145,13 +177,51 @@ async def commit(
 def get_structure(
     media_item_id: uuid.UUID, session: Session = Depends(session_scope)
 ) -> BookStructureResponse:
+    """The verification read (ADR-0004 steps 2-4): every unit, including
+    ``first_lines`` raw prose, for reviewing and correcting chapter
+    boundaries before confirming them. Refuses once ``PUT .../structure``
+    has verified the book — ``GET .../chapters`` is the reading-time
+    equivalent from that point on, and this route returning the full,
+    unfiltered book on request forever would let an already-reading client
+    re-fetch every future chapter's opening lines on demand."""
     owner = UserRepository(session).get_owner()
     item = MediaItemRepository(session).get(media_item_id) if owner else None
     if item is None or owner is None or item.user_id != owner.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
 
+    if item.structure_is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="structure is already verified; use GET .../chapters instead",
+        )
+
     units = list(StructureUnitRepository(session).list_for_media_item(media_item_id))
     return _structure_response(item, units)
+
+
+@router.get("/{media_item_id}/chapters", response_model=VisibleStructureResponse)
+def get_chapters(
+    media_item_id: uuid.UUID,
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
+) -> VisibleStructureResponse:
+    """The reading-time read: chapter id, ordinal, and label — never
+    ``first_lines`` — for every unit up to the active reading session's
+    current ordinal (ADR-0002 amendment, same ``ReaderContext`` pattern as
+    ``GET .../memories`` and ``GET .../predictions``)."""
+    item = MediaItemRepository(session).get(media_item_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
+
+    units = list_visible_structure_units(session, reader_context=reader_context)
+    return VisibleStructureResponse(
+        media_item_id=str(item.id),
+        title=item.title,
+        units=[
+            VisibleStructureUnitResponse(id=str(u.id), ordinal=u.ordinal, label=u.label)
+            for u in units
+        ],
+    )
 
 
 @router.put("/{media_item_id}/structure", response_model=BookStructureResponse)
@@ -180,17 +250,19 @@ def put_structure(
 
 @router.get("/{media_item_id}/predictions", response_model=list[PredictionResponse])
 def get_predictions(
-    media_item_id: uuid.UUID, session: Session = Depends(session_scope)
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
 ) -> list[PredictionResponse]:
-    """Every prediction extracted from this book's reflections, oldest first
-    (M5, ADR-0009) — pending ones alongside confirmed / refuted /
-    unresolvable ones, each with the evidence memories that settled it."""
-    owner = UserRepository(session).get_owner()
-    item = MediaItemRepository(session).get(media_item_id) if owner else None
-    if item is None or owner is None or item.user_id != owner.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
-
-    predictions = list_predictions_for_book(session, media_item_id=media_item_id)
+    """Predictions extracted from this book's reflections, oldest first (M5,
+    ADR-0009), scoped to the active reading session's current ordinal
+    (ADR-0012) — not by which session made or resolved them. A prediction
+    made past the current position is omitted; one made before it but not
+    yet due for resolution renders ``pending`` with no evidence even if an
+    earlier, further-along session already resolved it. Same shape as
+    ``GET .../memories``: no ordinal is ever a request parameter, and a book
+    with no active reading session 404s rather than falling back to
+    unfiltered history."""
+    predictions = list_predictions_for_book(session, reader_context=reader_context)
     return [
         PredictionResponse(
             id=str(p.id),

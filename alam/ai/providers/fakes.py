@@ -26,11 +26,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from alam.ai.providers.embeddings import Embedding
-from alam.ai.providers.llm import Completion
+from alam.ai.providers.llm import Completion, validate_against_schema
 from alam.ai.providers.stt import Transcript
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
+    from typing import Any
 
 FAKE_LLM_MODEL = "fake-llm-v1"
 FAKE_EMBEDDING_MODEL = "fake-embedding-v1"
@@ -81,6 +82,7 @@ class FakeLLM:
         prompt_version_id: str,
         max_tokens: int | None = None,
         temperature: float = 0.0,
+        response_schema: Mapping[str, Any] | None = None,
     ) -> Completion:
         self.calls.append(LLMCall(prompt, prompt_version_id, max_tokens, temperature))
 
@@ -88,6 +90,9 @@ class FakeLLM:
             raise self.fail_with
 
         text = self.responses.pop(0) if self.responses else self._default_text(prompt)
+
+        if response_schema is not None:
+            validate_against_schema(text, response_schema)
 
         return Completion(
             text=text,

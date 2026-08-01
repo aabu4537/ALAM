@@ -16,9 +16,12 @@ from typing import TYPE_CHECKING
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from alam.api.main import create_app
+from alam.persistence.session import session_scope
 from tests.conftest import REQUIRE_DB_TESTS_ENV, TEST_DATABASE_URL_ENV
 
 if TYPE_CHECKING:
@@ -96,3 +99,21 @@ def session(migrated_engine: Engine) -> Iterator[Session]:
         if transaction.is_active:
             transaction.rollback()
         connection.close()
+
+
+@pytest.fixture
+def client(session: Session) -> Iterator[TestClient]:
+    """The app, with ``session_scope`` overridden to hand out this test's own
+    rolled-back session rather than opening a second, uncoordinated one
+    against the real engine — the standard way to exercise a route's actual
+    HTTP path (validation, dependency wiring, response serialization) while
+    keeping the same transactional isolation every other DB test gets."""
+
+    def _session_override() -> Iterator[Session]:
+        yield session
+
+    app = create_app()
+    app.dependency_overrides[session_scope] = _session_override
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()

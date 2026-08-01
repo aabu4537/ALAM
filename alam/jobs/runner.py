@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from alam.config.logging import get_logger
+from alam.jobs.context import current_job_id
 from alam.jobs.handlers import get_handler
 from alam.jobs.queue import JobQueue
 from alam.persistence.models.job import Job
@@ -95,6 +96,11 @@ def _run_one(session: Session, queue: JobQueue, job: Job) -> bool:
     """Run one claimed job. Returns True on success."""
     job_id, job_type, payload = job.id, job.job_type, job.payload
 
+    # Set for the duration of the handler call only, so anything running
+    # underneath it (the LLM instrumentation wrapper) can attribute what it
+    # records to this job without the handler signature knowing about it
+    # (M5.5a). Reset unconditionally — success or failure.
+    token = current_job_id.set(job_id)
     try:
         get_handler(job_type)(session, payload)
     except Exception as exc:
@@ -121,8 +127,10 @@ def _run_one(session: Session, queue: JobQueue, job: Job) -> bool:
             error=str(exc),
         )
         return False
-
-    queue.complete(job)
-    session.commit()
-    log.info("job.succeeded", job_id=str(job_id), job_type=job_type)
-    return True
+    else:
+        queue.complete(job)
+        session.commit()
+        log.info("job.succeeded", job_id=str(job_id), job_type=job_type)
+        return True
+    finally:
+        current_job_id.reset(token)
