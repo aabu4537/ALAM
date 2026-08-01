@@ -97,10 +97,21 @@ embedding quality, but confirmed rather than assumed.
 That number is expected and structural, not a lucky sample: Layer 1 is a SQL
 predicate (`WHERE structure_ordinal <= :current`), not a model's probabilistic
 judgment, so leakage at this layer is either always zero or a bug. Layers 2
-and 3 (prompt constraint, output classifier) don't exist yet — they need a
-synthesis step that doesn't ship until M6 — so this number covers Layer 1
-only, not the full defense-in-depth stack. It will be revisited, and likely
-get worse before it gets better, once Layer 3 is real.
+and 3 (prompt constraint, output classifier) didn't exist as of M5 — they
+needed a synthesis step that didn't ship until M6. `GET
+/books/{id}/journey-summary` (M6 session 1) is that first step: the prompt
+states the reader's position (Layer 2), and every generated draft is
+checked against the exact memories the ordinal filter excluded before it's
+ever persisted or returned (Layer 3,
+[`alam/ai/synthesis/leak_check.py`](alam/ai/synthesis/leak_check.py)),
+with its own adversarial case,
+**`synthesis_leakage_rate`** ([`alam/eval/journey_summary_eval.py`](alam/eval/journey_summary_eval.py),
+also enforced in CI). Unlike the 0.0 above, this number is not yet a real
+quality signal — the fake LLM provider this deployment runs has no actual
+judgment about what constitutes a spoiler, so the harness supplies a canned
+clean verdict to exercise the plumbing rather than to measure anything.
+It will be revisited, and likely get worse before it gets better, once a
+real provider backs Layer 3 (see [ADR-0013](docs/adr/0013-synthesis-artifacts-and-layer3.md)).
 
 Layer 1's coverage isn't limited to `retrieve_memories`. Every reader-facing
 route that returns media-derived content — memories, predictions, chapters —
@@ -251,6 +262,7 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
 | `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
 | `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it, masked back to pending until the resolution window closes relative to the reader's own position (M5, ADR-0009; ADR-0012). |
+| `GET /books/{id}/journey-summary` | A short narrative of the reader's journey through this book so far, generated on demand from their own memories and predictions and cached until stale. Checked against everything the ordinal filter excluded before it's ever returned (M6 session 1, ADR-0002 Layers 2–3, ADR-0013). A generation the check flags is never served — 503, not the leaked draft. |
 | `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract

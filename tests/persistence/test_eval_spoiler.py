@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from alam.eval.journey_summary_eval import run_journey_summary_spoiler_eval
 from alam.eval.prediction_spoiler_eval import run_prediction_reread_spoiler_eval
 from alam.eval.spoiler_eval import run_spoiler_eval, run_spoiler_eval_via_endpoint
 from alam.eval.structure_spoiler_eval import run_structure_spoiler_eval
@@ -64,4 +65,17 @@ def test_chapters_have_zero_leakage_and_first_lines_never_appears(session: Sessi
 
     leaked = [r for r in report.results if r.leaked]
     assert not leaked, f"structure leakage in: {leaked}"
+    assert report.leakage_rate == 0.0
+
+
+def test_journey_summary_has_zero_leakage(session: Session) -> None:
+    """M6 session 1's ``synthesis_leakage_rate`` (ADR-0002 Layer 3,
+    ADR-0013): a journey summary generated mid-book must not leak a
+    spoiler-shaped memory the ordinal filter excluded, checked both by
+    Layer 3's own verdict and, defense-in-depth, by a plain substring check
+    on the draft actually returned."""
+    report = run_journey_summary_spoiler_eval(session)
+
+    leaked = [r for r in report.results if r.leaked]
+    assert not leaked, f"journey summary leakage in: {leaked}"
     assert report.leakage_rate == 0.0

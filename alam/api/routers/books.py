@@ -40,6 +40,14 @@ from alam.persistence.repositories.structure_units import StructureUnitRepositor
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
 from alam.services.epub_ingestion import UnknownMediaItemError, commit_epub, preview_epub
+from alam.services.journey_summary import (
+    JourneySummaryBlockedError,
+    JourneySummaryGenerationError,
+    get_or_generate_journey_summary,
+)
+from alam.services.journey_summary import (
+    UnknownMediaItemError as UnknownJourneySummaryMediaItemError,
+)
 from alam.services.predictions import list_predictions_for_book
 from alam.services.structure_verification import verify_structure
 from alam.services.structure_visibility import list_visible_structure_units
@@ -112,6 +120,15 @@ class PredictionResponse(BaseModel):
     resolution_window: int
     resolved_at: str | None
     evidence: list[str]
+
+
+class JourneySummaryResponse(BaseModel):
+    id: str
+    media_item_id: str
+    narrative: str
+    generated_at_ordinal: int
+    model: str
+    prompt_version_id: str
 
 
 def _preview_response(parsed: ParsedEpub) -> EpubPreviewResponse:
@@ -275,3 +292,44 @@ def get_predictions(
         )
         for p in predictions
     ]
+
+
+@router.get("/{media_item_id}/journey-summary", response_model=JourneySummaryResponse)
+def get_journey_summary(
+    session: Session = Depends(session_scope),
+    reader_context: ReaderContext = Depends(reader_context_dependency),
+) -> JourneySummaryResponse:
+    """A short narrative of the reader's journey through this book so far
+    (M6 session 1, ADR-0013), generated synchronously on first read or once
+    the cached artifact goes stale (``services.journey_summary``). Same
+    ``ReaderContext`` gating as ``.../predictions`` and ``.../memories``: no
+    ordinal is ever a request parameter, and a book with no active reading
+    session 404s.
+
+    A fresh generation attempt that fails the Layer 3 leak check never
+    reaches this response — the service raises instead of returning the
+    blocked draft, and this route turns that into a 503 rather than a
+    silent fallback to stale content.
+    """
+    try:
+        summary = get_or_generate_journey_summary(session, reader_context=reader_context)
+    except UnknownJourneySummaryMediaItemError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except JourneySummaryBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except JourneySummaryGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    assert summary.draft is not None  # only COMPLETE rows are ever returned here
+    assert summary.model is not None
+    assert summary.prompt_version_id is not None
+    return JourneySummaryResponse(
+        id=str(summary.id),
+        media_item_id=str(summary.media_item_id),
+        narrative=summary.draft,
+        generated_at_ordinal=summary.generated_at_ordinal,
+        model=summary.model,
+        prompt_version_id=summary.prompt_version_id,
+    )

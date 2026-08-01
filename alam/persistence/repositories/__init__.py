@@ -6,6 +6,7 @@ span several repositories.
 """
 
 from alam.persistence.repositories.captures import CaptureRepository
+from alam.persistence.repositories.journey_summaries import JourneySummaryRepository
 from alam.persistence.repositories.llm_calls import LLMCallRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
 from alam.persistence.repositories.memories import MemoryRepository
@@ -19,6 +20,7 @@ from alam.persistence.repositories.users import UserRepository
 
 __all__ = [
     "CaptureRepository",
+    "JourneySummaryRepository",
     "LLMCallRepository",
     "MediaItemRepository",
     "MemoryEmbeddingRepository",

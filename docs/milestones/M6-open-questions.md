@@ -10,7 +10,10 @@ by work that landed before this doc was read again — the ReaderContext /
 `get_reader_context` hardening pass and the `llm_calls` instrumentation +
 real-provider work, both merged ahead of M6 starting. Questions 1, 2, and
 the memory-deletion item under 5 were put to the user directly at M6's
-start; resolutions are noted inline below.
+start; resolutions are noted inline below. A sixth item, outside the
+original five, was decided during M6 session 1 planning and is recorded in
+§6: Layer 3 spoiler containment ships as part of M6 after all, once
+session 1 gave it its first real caller.
 
 ---
 
@@ -281,3 +284,41 @@ All three confirmed against the code, not inferred from docs:
   Addressed by ADR-0011 — every migration from here forward must assume
   the two pipelines can land in either order, with the expand/contract
   discipline and worked example recorded there.
+
+---
+
+## 6. Layer 3 spoiler containment (decided during M6 session 1 planning)
+
+**Finding.** Not one of this audit's original five questions — ADR-0002
+itself already named the reason: Layer 2 and Layer 3 had "Decided, not
+implemented" status because neither had a caller yet, and this audit's own
+implicit default (build the minimum M6 needs, leave Layer 3 for whenever a
+synthesis response's cost/latency actually justifies it) was the cheaper
+path. M6 session 1 (journey summaries) is the first code in the repository
+that generates prose rather than retrieving or classifying existing
+records, which makes it the first point either layer *could* run.
+
+**Decision, put to the user directly at session 1 planning, 2026-08-01:
+Layer 3 ships as part of M6 session 1, overriding the cheaper default.**
+Rationale, verbatim-close: Layer 1's `leakage_rate=0.0` measures
+*retrieval* — whether an already-excluded memory ever reaches the prompt.
+It says nothing about *generation* — a model handed only permitted
+memories can still leak a future event by inference in its own prose
+(paraphrase, plausible-sounding synthesis, connecting dots the reader
+hasn't reached yet). M6 is the first milestone where that failure mode can
+even occur, so it is the first place closing it stops being speculative.
+
+**Implemented as a structured classifier, not a second freeform
+generation:** input is the draft plus the exact memory content the ordinal
+filter excluded from it (nothing new to compute — retrieval already
+excludes it, this just doesn't discard it before the check); output is
+schema-constrained `{leaked: bool, spans: [...]}` via `response_schema`,
+the same `EXTRACTION_RESPONSE_SCHEMA` mechanism M5.5a's follow-up work
+established. Runs once per persisted artifact (at generation time), not
+once per read of an already-`complete` cached row. Layer 2 (stating the
+reader's position in the prompt) landed alongside it — it had no caller
+either until this session's prompt did. Full design, the persisted-artifact
+row lifecycle it's part of, and the rationale for classifier-not-generation
+are in **ADR-0013**. `synthesis_leakage_rate`
+(`alam/eval/journey_summary_eval.py`) is the corresponding Layer 4 case,
+run in CI alongside the existing `leakage_rate` cases.
