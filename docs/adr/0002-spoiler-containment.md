@@ -3,6 +3,27 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
+## Implementation status (as of 2026-08-01)
+
+**Decided and implemented:** Layer 1 — `domain/spoiler_filter.py`'s
+`is_visible`/`filter_visible`, enforced as an index-only SQL predicate in
+`persistence/repositories/retrieval.py` and re-checked as defense-in-depth
+after RRF fusion in `ai/retrieval/hybrid.py`. Layer 4 — `alam/eval/spoiler_eval.py`
+exists, runs in CI, and reads `leakage_rate=0.0` as expected — but at
+**10 adversarial cases**, not the "roughly 200" this ADR names as the
+target. The mechanism is real; the scale is not there yet.
+
+**Decided, not implemented:** Layer 2 (a system prompt stating the reader's
+current position) and Layer 3 (a second-pass classifier checking a draft
+response against retrieved-but-excluded content) — neither exists, because
+neither has a caller yet. Both apply to a *synthesis response*
+(a briefing, a journey summary, a recommendation's explanation), and no
+such response is generated anywhere in the codebase — that's M6
+(`docs/milestones.md`), not built. This ADR's "Negative" consequences
+section already anticipated this ("Layer 3 adds a model call and latency
+to every synthesis response") without flagging that no such response
+existed yet to add it to.
+
 ## Context
 
 The original requirement read "the AI must NEVER spoil future content." That is

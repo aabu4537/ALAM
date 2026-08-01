@@ -3,6 +3,26 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
+## Implementation status (as of 2026-08-01)
+
+**Decided and implemented:** the schema seam. `media_items` (`media_type`
+discriminator, JSONB `attributes`) and `media_structure_units` (`ordinal`,
+`unit_type`) exist exactly as decided, and every media-agnostic table —
+memories, embeddings, preference facts, predictions, jobs — keys on
+`media_item_id` and ordinals, not a book-specific identifier.
+
+**Decided, not implemented:** the `MediaProvider` Protocol. `media/base.py`
+does not exist. `media/books/epub.py` exports `parse_epub`, not the three
+methods (`search`, `fetch_metadata`, `normalize_progress`) this ADR
+describes as already built. Progress normalization is a free function
+(`domain/reading_progress.py:compute_progress`), not a Protocol method.
+
+**Deferred, deliberately, per ADR-0003's own reasoning:** building the
+Protocol now, with no second media type to validate its shape against,
+risks exactly the "wrong abstraction" failure mode this ADR opens by
+naming. Write it when a second `media/` implementation is actually being
+built, not before — matching the caution this ADR already argues for.
+
 ## Context
 
 ALAM is intended to eventually cover movies, TV, games, podcasts, and articles.
