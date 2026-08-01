@@ -26,6 +26,7 @@ from alam.persistence.repositories.structure_units import StructureUnitRepositor
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
 from alam.services.epub_ingestion import UnknownMediaItemError, commit_epub, preview_epub
+from alam.services.predictions import list_predictions_for_book
 from alam.services.structure_verification import verify_structure
 
 if TYPE_CHECKING:
@@ -69,6 +70,16 @@ class DesiredUnitRequest(BaseModel):
     id: uuid.UUID | None = None
     label: str
     first_lines: str | None = None
+
+
+class PredictionResponse(BaseModel):
+    id: str
+    statement: str
+    status: str
+    made_at_ordinal: int
+    resolution_window: int
+    resolved_at: str | None
+    evidence: list[str]
 
 
 def _preview_response(parsed: ParsedEpub) -> EpubPreviewResponse:
@@ -165,3 +176,30 @@ def put_structure(
     except StructurePlanError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _structure_response(item, units)
+
+
+@router.get("/{media_item_id}/predictions", response_model=list[PredictionResponse])
+def get_predictions(
+    media_item_id: uuid.UUID, session: Session = Depends(session_scope)
+) -> list[PredictionResponse]:
+    """Every prediction extracted from this book's reflections, oldest first
+    (M5, ADR-0009) — pending ones alongside confirmed / refuted /
+    unresolvable ones, each with the evidence memories that settled it."""
+    owner = UserRepository(session).get_owner()
+    item = MediaItemRepository(session).get(media_item_id) if owner else None
+    if item is None or owner is None or item.user_id != owner.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
+
+    predictions = list_predictions_for_book(session, media_item_id=media_item_id)
+    return [
+        PredictionResponse(
+            id=str(p.id),
+            statement=p.statement,
+            status=p.status.value,
+            made_at_ordinal=p.made_at_ordinal,
+            resolution_window=p.resolution_window,
+            resolved_at=p.resolved_at.isoformat() if p.resolved_at else None,
+            evidence=p.evidence,
+        )
+        for p in predictions
+    ]
