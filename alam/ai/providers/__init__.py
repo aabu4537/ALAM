@@ -58,6 +58,19 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
     settings = settings or get_settings()
     if settings.llm_provider == "fake":
         return InstrumentedLLMProvider(FakeLLM())
+    if settings.llm_provider == "anthropic":
+        # Imported here, not at module level, so importing this package —
+        # which every test does, including TestNoNetwork — never pulls in
+        # the anthropic client for the (overwhelmingly common) "fake" path.
+        from alam.ai.providers.real.anthropic_llm import AnthropicLLM
+
+        assert settings.anthropic_api_key is not None  # enforced by Settings
+        return InstrumentedLLMProvider(
+            AnthropicLLM(
+                api_key=settings.anthropic_api_key.get_secret_value(),
+                model=settings.anthropic_model,
+            )
+        )
     raise ValueError(f"unknown llm provider: {settings.llm_provider!r}")
 
 
@@ -65,6 +78,14 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
     settings = settings or get_settings()
     if settings.embedding_provider == "fake":
         return FakeEmbeddingProvider()
+    if settings.embedding_provider == "voyage":
+        from alam.ai.providers.real.voyage_embeddings import VoyageEmbeddingProvider
+
+        assert settings.voyage_api_key is not None  # enforced by Settings
+        return VoyageEmbeddingProvider(
+            api_key=settings.voyage_api_key.get_secret_value(),
+            model=settings.voyage_model,
+        )
     raise ValueError(f"unknown embedding provider: {settings.embedding_provider!r}")
 
 
@@ -72,4 +93,12 @@ def get_stt_provider(settings: Settings | None = None) -> SpeechToTextProvider:
     settings = settings or get_settings()
     if settings.stt_provider == "fake":
         return FakeSpeechToText()
+    if settings.stt_provider == "openai":
+        from alam.ai.providers.real.openai_stt import OpenAIWhisper
+
+        assert settings.openai_api_key is not None  # enforced by Settings
+        return OpenAIWhisper(
+            api_key=settings.openai_api_key.get_secret_value(),
+            model=settings.whisper_model,
+        )
     raise ValueError(f"unknown stt provider: {settings.stt_provider!r}")

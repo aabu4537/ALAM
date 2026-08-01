@@ -16,6 +16,14 @@ dependencies = [
     # SQLAlchemy Vector type for the pgvector extension already enabled at M0.
     # See ADR-0008 for why the column it maps is unconstrained (no fixed N).
     "pgvector>=0.3",
+    # Real providers behind the M0 Protocols (M5.5a): Anthropic for LLM
+    # completions, OpenAI for Whisper transcription. Voyage AI (the chosen
+    # embedding vendor) is called directly over its REST API with httpx
+    # instead — its own SDK pulls in an unrelated langchain toolchain for
+    # what is otherwise one JSON endpoint.
+    "anthropic>=0.120.2",
+    "openai>=2.52.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
