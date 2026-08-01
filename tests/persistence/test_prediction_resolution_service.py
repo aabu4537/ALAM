@@ -4,7 +4,6 @@ terminal status (M5 session 2, ADR-0009)."""
 
 from __future__ import annotations
 
-import uuid
 from typing import TYPE_CHECKING
 
 import pytest
@@ -29,7 +28,7 @@ from alam.services.prediction_resolution import resolve_due_predictions
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from alam.persistence.models import MediaItem, User
+    from alam.persistence.models import MediaItem, Memory, User
 
 pytestmark = pytest.mark.db
 
@@ -67,8 +66,7 @@ def _advance_reading_session(
     )
 
 
-def _make_memory(session: Session, book: MediaItem, *, ordinal: int, content: str) -> str:
-    """Returns the created memory's id as a string."""
+def _make_memory(session: Session, book: MediaItem, *, ordinal: int, content: str) -> Memory:
     reading_session = ReadingSessionRepository(session).get_active_for_media_item(book.id)
     assert reading_session is not None
     unit = next(
@@ -91,7 +89,7 @@ def _make_memory(session: Session, book: MediaItem, *, ordinal: int, content: st
         prompt_version_id="extract-memories-v1",
         extracted=[ExtractedMemory(memory_type=ExtractedMemoryType.OTHER, content=content)],
     )
-    return str(memory.id)
+    return memory
 
 
 class TestResolveDuePredictions:
@@ -103,10 +101,10 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=10,
@@ -126,10 +124,10 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
@@ -151,15 +149,15 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="the traitor will be Yueh")
+        source = _make_memory(session, book, ordinal=1, content="the traitor will be Yueh")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
         )
-        evidence_id = _make_memory(session, book, ordinal=2, content="Yueh really did betray them")
+        evidence = _make_memory(session, book, ordinal=2, content="Yueh really did betray them")
         _advance_reading_session(session, owner, book, ordinal=5)
         fake_llm = FakeLLM(responses=['{"outcome": "confirmed"}'])
         monkeypatch.setattr(
@@ -170,7 +168,7 @@ class TestResolveDuePredictions:
 
         assert prediction.status is PredictionStatus.CONFIRMED
         assert prediction.resolution_prompt_version_id == "resolve-prediction-v1"
-        assert predictions.list_evidence_memory_ids(prediction.id) == [uuid.UUID(evidence_id)]
+        assert predictions.list_evidence_memory_ids(prediction.id) == [evidence.id]
         assert len(fake_llm.calls) == 1
         assert "the traitor will be Yueh" in fake_llm.calls[0].prompt
         assert "Yueh really did betray them" in fake_llm.calls[0].prompt
@@ -180,10 +178,10 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
@@ -208,10 +206,10 @@ class TestResolveDuePredictions:
         null."""
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
@@ -233,9 +231,9 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         PredictionRepository(session).create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
@@ -255,10 +253,10 @@ class TestResolveDuePredictions:
     ) -> None:
         _chapters(session, book, 10)
         _advance_reading_session(session, owner, book, ordinal=1)
-        source_id = _make_memory(session, book, ordinal=1, content="prediction")
+        source = _make_memory(session, book, ordinal=1, content="prediction")
         predictions = PredictionRepository(session)
         prediction = predictions.create(
-            source_memory_id=source_id,
+            source_memory_id=source.id,
             media_item_id=book.id,
             made_at_ordinal=1,
             resolution_window=2,
