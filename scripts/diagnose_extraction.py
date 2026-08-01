@@ -19,6 +19,7 @@ Not part of the test suite (rule 8) — same reasoning as run_local_eval.py.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 
@@ -32,12 +33,15 @@ os.environ.setdefault(
 )
 
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from alam.ai.extraction.memories import EXTRACTION_RESPONSE_SCHEMA, ExtractedMemory
 from alam.ai.prompts.extraction import PROMPT_VERSION_ID, build_extraction_prompt
 from alam.ai.providers import get_llm_provider
 from alam.config.settings import get_settings
 from alam.eval.extraction_eval import EXTRACTION_CASES
+from alam.persistence import session as session_module
+from alam.persistence.models.llm_call import LLMCall
 
 
 def _expected_types(case: object) -> tuple[str, ...]:
@@ -49,6 +53,7 @@ def main() -> None:
     settings = get_settings()
     print(f"model={settings.ollama_model}\n")
 
+    started_at = dt.datetime.now(dt.UTC)
     llm = get_llm_provider()
     buckets: dict[int, list[str]] = {1: [], 2: [], 3: [], 4: [], 5: []}
 
@@ -108,6 +113,21 @@ def main() -> None:
     print("=== bucket summary ===")
     for n in range(1, 6):
         print(f"bucket {n}: {len(buckets[n])} — {buckets[n]}")
+
+    print()
+    print("=== llm_calls recorded this run ===")
+    with session_module.get_session_factory()() as session:
+        calls = session.scalars(
+            select(LLMCall).where(LLMCall.created_at >= started_at).order_by(LLMCall.created_at)
+        ).all()
+        total_input = sum(c.input_tokens for c in calls)
+        total_output = sum(c.output_tokens for c in calls)
+        print(f"{len(calls)} calls, {total_input} input tokens, {total_output} output tokens")
+        for c in calls:
+            print(
+                f"  {c.call_site} model={c.model} prompt_version={c.prompt_version_id} "
+                f"in={c.input_tokens} out={c.output_tokens} latency_ms={c.latency_ms:.0f}"
+            )
 
 
 if __name__ == "__main__":
