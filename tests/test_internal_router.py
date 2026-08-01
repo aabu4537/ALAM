@@ -20,6 +20,8 @@ SECRET = "test-drain-secret"
 DEMO_SEED = "/internal/demo/seed"
 DEMO_SEED_SECRET = "test-demo-seed-secret"
 
+EMBEDDING_BACKFILL = "/internal/embeddings/backfill"
+
 
 @pytest.fixture
 def secured_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
@@ -32,6 +34,16 @@ def secured_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
 @pytest.fixture
 def demo_seed_secured_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    monkeypatch.setenv("ALAM_DEMO_SEED_SECRET", DEMO_SEED_SECRET)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        yield client
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def both_secrets_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    monkeypatch.setenv("ALAM_DRAIN_SECRET", SECRET)
     monkeypatch.setenv("ALAM_DEMO_SEED_SECRET", DEMO_SEED_SECRET)
     get_settings.cache_clear()
     with TestClient(create_app()) as client:
@@ -109,3 +121,43 @@ def test_demo_seed_secret_is_never_echoed(demo_seed_secured_client: TestClient) 
     response = demo_seed_secured_client.post(DEMO_SEED, headers={"Authorization": "Bearer wrong"})
 
     assert DEMO_SEED_SECRET not in response.text
+
+
+def test_embedding_backfill_unconfigured_secret_refuses_rather_than_opens(
+    client: TestClient,
+) -> None:
+    """Reuses require_drain_secret, so an unset secret fails closed the same
+    way the drain endpoint does."""
+    response = client.post(EMBEDDING_BACKFILL)
+
+    assert response.status_code == 503
+
+
+def test_embedding_backfill_missing_credentials_are_rejected(
+    secured_client: TestClient,
+) -> None:
+    assert secured_client.post(EMBEDDING_BACKFILL).status_code == 401
+
+
+def test_embedding_backfill_wrong_secret_is_rejected(secured_client: TestClient) -> None:
+    response = secured_client.post(EMBEDDING_BACKFILL, headers={"Authorization": "Bearer wrong"})
+
+    assert response.status_code == 401
+
+
+def test_embedding_backfill_demo_seed_secret_does_not_also_work(
+    both_secrets_client: TestClient,
+) -> None:
+    """The embeddings backfill endpoint deliberately shares drain_secret, not
+    demo_seed_secret. With both configured, the demo-seed token must still be
+    rejected here — only the drain secret should authenticate this endpoint.
+    Accepted-credentials behaviour needs a real database, which this
+    TestClient's app doesn't have wired up — same reason drain_jobs and
+    seed_demo have no 200-path test here either; embed_memories_backfill
+    itself is exercised directly against the `session` fixture in
+    tests/persistence/test_embedding_backfill.py."""
+    response = both_secrets_client.post(
+        EMBEDDING_BACKFILL, headers={"Authorization": f"Bearer {DEMO_SEED_SECRET}"}
+    )
+
+    assert response.status_code == 401

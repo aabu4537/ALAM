@@ -226,3 +226,44 @@ class TestSuccessPath:
             assert row.status == "succeeded"
             assert row.claimed_at is None
             assert row.lease_expires_at is None
+
+    def test_a_job_enqueued_by_a_handler_is_claimed_in_the_same_drain_call(
+        self, factory: sessionmaker[Session], temp_handler: Any
+    ) -> None:
+        """The property chained pipelines (M2's transcribe -> correct ->
+        extract, M3's backfill batches) depend on: a handler's own enqueue
+        must not have to wait for the next cron tick. drain()'s claim loop
+        re-queries the jobs table fresh on every iteration, so a job
+        committed by the previous iteration's handler is visible to the
+        next `claim()` call within the same drain() invocation."""
+
+        def link_one(session: Session, payload: dict[str, Any]) -> None:
+            depth = payload["depth"]
+            if depth < 3:
+                JobQueue(session).enqueue(job_type="chain", payload={"depth": depth + 1})
+
+        job_type = temp_handler("chain", link_one)
+        _enqueue(factory, job_type=job_type, payload={"depth": 0})
+
+        result = drain(factory, max_jobs=10, budget_seconds=10, lease_seconds=60)
+
+        assert result.claimed == 4  # depth 0, 1, 2, 3
+        assert result.succeeded == 4
+        assert not result.budget_exhausted
+
+    def test_a_chain_longer_than_max_jobs_stops_at_the_cap(
+        self, factory: sessionmaker[Session], temp_handler: Any
+    ) -> None:
+        """The other half of the same guarantee: re-querying within the
+        budget must still respect max_jobs, or one runaway chain could
+        starve every other job type sharing the queue."""
+
+        def link_forever(session: Session, payload: dict[str, Any]) -> None:
+            JobQueue(session).enqueue(job_type="chain2", payload={})
+
+        job_type = temp_handler("chain2", link_forever)
+        _enqueue(factory, job_type=job_type)
+
+        result = drain(factory, max_jobs=5, budget_seconds=10, lease_seconds=60)
+
+        assert result.claimed == 5

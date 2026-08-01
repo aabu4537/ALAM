@@ -1,5 +1,4 @@
-"""Evaluation harness — M3, not built.
-
-Golden retrieval set, adversarial spoiler set, and extraction accuracy land
-here and run in CI. See ADR-0002 layer 4 and docs/milestones.md (M3).
-"""
+"""Evaluation harness (M3, ADR-0002 Layer 4): golden retrieval set
+(``retrieval_eval.py``), adversarial spoiler set (``spoiler_eval.py``), and
+extraction accuracy (``extraction_eval.py``). ``tests/eval/`` is what runs
+these in CI."""

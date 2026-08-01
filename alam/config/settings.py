@@ -83,6 +83,22 @@ class Settings(BaseSettings):
     default as the drain secret.
     """
 
+    embedding_backfill_batch_size: int = Field(default=50, ge=1)
+    """Memories processed per backfill job invocation (ADR-0008). Bounds one
+    invocation's work so it fits comfortably inside a single drain, not the
+    reason it can be interrupted safely — the job's own re-enqueue-with-
+    cursor design is what makes a kill mid-run resumable. This just tunes
+    how many batches that takes.
+    """
+
+    # --- Retrieval (M3) ---
+    retrieval_candidate_limit: int = Field(default=20, ge=1)
+    """Rows fetched per branch (vector, full-text) before RRF fusion narrows
+    to the caller's requested limit. Wider than the final limit so a memory
+    that ranks well on only one axis still reaches the fusion step instead of
+    being cut before fusion ever sees it.
+    """
+
     # --- Providers ---
     llm_provider: ProviderKind = "fake"
     embedding_provider: ProviderKind = "fake"

@@ -24,11 +24,55 @@ def test_vector_extension_is_enabled(session: Session) -> None:
     assert installed is not None
 
 
+def test_memory_embeddings_vector_column_has_no_fixed_dimension(session: Session) -> None:
+    """ADR-0008: a fixed-width ``vector(N)`` column is what forces a
+    same-table embedding design into a stop-the-world migration on every
+    model swap. This side table's vector column must stay dimensionless so
+    rows from different-dimension models can coexist for the same memory."""
+    column_type = session.execute(
+        text(
+            "SELECT format_type(a.atttypid, a.atttypmod) "
+            "FROM pg_attribute a "
+            "WHERE a.attrelid = 'memory_embeddings'::regclass AND a.attname = 'vector'"
+        )
+    ).scalar_one()
+
+    assert column_type == "vector", f"expected an unconstrained vector column, got {column_type!r}"
+
+
+def test_memory_embeddings_natural_key_is_unique_but_content_hash_is_not(
+    session: Session,
+) -> None:
+    """The natural key is the real uniqueness guarantee — one row per memory
+    per model/version. ``content_hash`` is deliberately just an index: two
+    different memories can share identical content, and both legitimately
+    need their own row (ADR-0008)."""
+    unique_constraints = set(
+        session.scalars(
+            text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conrelid = 'memory_embeddings'::regclass AND contype = 'u'"
+            )
+        ).all()
+    )
+    indexes = set(
+        session.scalars(
+            text("SELECT indexname FROM pg_indexes WHERE tablename = 'memory_embeddings'")
+        ).all()
+    )
+
+    assert "uq_memory_embeddings_memory_model_version" in unique_constraints
+    assert not any("content_hash" in c for c in unique_constraints)
+    assert "ix_memory_embeddings_content_hash" in indexes
+
+
 def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
     """M0 shipped four tables; M2 adds `reading_sessions`, `captures`
-    (session 1), and `memories` (session 3). `preference_facts` and content
-    chunks are later milestones, and a stray table here means something was
-    built ahead of its milestone."""
+    (session 1), and `memories` (session 3); M3 session 1 adds
+    `memory_embeddings`. `preference_facts` and `content_chunks` are later
+    work, and a stray table here means something was built ahead of its
+    milestone (or, for content_chunks, ahead of the chunking pipeline that
+    doesn't exist yet — see ADR-0008)."""
     tables = set(
         session.scalars(
             text(
@@ -46,6 +90,7 @@ def test_expected_tables_exist_and_nothing_else(session: Session) -> None:
         "reading_sessions",
         "captures",
         "memories",
+        "memory_embeddings",
     }
 
 
