@@ -24,6 +24,15 @@ dependencies = [
     "anthropic>=0.120.2",
     "openai>=2.52.0",
     "httpx>=0.28.1",
+    # Local ($0) counterparts (M5.5a task 2). Ollama reuses the openai
+    # client above via a base-url override, no new dependency. These two
+    # do add real weight — sentence-transformers pulls in torch
+    # (~100MB+ download, ~400MB+ installed) and faster-whisper pulls in
+    # ctranslate2 — because both run inference in-process rather than
+    # against a server. Named explicitly for this milestone; flagged here
+    # rather than added quietly.
+    "sentence-transformers>=5.6.1",
+    "faster-whisper>=1.2.1",
 ]
 
 [dependency-groups]
@@ -103,6 +112,11 @@ strict = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+# faster-whisper ships no py.typed marker / stubs (M5.5a task 2).
+[[tool.mypy.overrides]]
+module = "faster_whisper.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -15,14 +15,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "ci", "staging", "production"]
 LogFormat = Literal["json", "console"]
-LLMProviderKind = Literal["fake", "anthropic"]
-EmbeddingProviderKind = Literal["fake", "voyage"]
-SttProviderKind = Literal["fake", "openai"]
+LLMProviderKind = Literal["fake", "anthropic", "ollama"]
+EmbeddingProviderKind = Literal["fake", "voyage", "local"]
+SttProviderKind = Literal["fake", "openai", "faster_whisper"]
 """One union per provider kind, not one shared union (M5.5a) — the three
 providers have disjoint real vendors, and a shared ``ProviderKind`` would let
 ``ALAM_LLM_PROVIDER=voyage`` type-check as valid when it can never resolve to
 anything. CLAUDE.md rule 8: provider access goes through a Protocol either
-way, so this only constrains which vendor name is even legal in config."""
+way, so this only constrains which vendor name is even legal in config.
+
+``ollama`` / ``local`` / ``faster_whisper`` (task 2) are the $0 local
+counterparts and deliberately absent from ``PAID_PROVIDER_KINDS`` below —
+they need no credential and no ``ALAM_ALLOW_PAID_PROVIDERS`` gate."""
 
 PAID_PROVIDER_KINDS: frozenset[str] = frozenset({"anthropic", "voyage", "openai"})
 """Every provider kind that can spend real money (M5.5a task 1). Checked
@@ -165,6 +169,32 @@ class Settings(BaseSettings):
     something to add later, not implied by this key's presence."""
 
     whisper_model: str = "whisper-1"
+
+    # --- Local providers (M5.5a task 2) ---
+    # $0, no credential, no ALAM_ALLOW_PAID_PROVIDERS gate. Not tested by
+    # the unit test suite (rule 8) — constructing any of these can hit the
+    # network on a cache-miss (pulling a model), so they're exercised only
+    # by the eval harness, run manually, never by pytest.
+    ollama_base_url: str = "http://localhost:11434/v1"
+    """Ollama's OpenAI-compatible endpoint. Reuses the ``openai`` SDK
+    already installed for Whisper (task 3) with this as ``base_url`` —
+    verified against the installed SDK version to work as a plain
+    base-url override, no parallel HTTP client written for this."""
+    ollama_model: str = "llama3.2"
+    """Must already be pulled locally (``ollama pull llama3.2``) — this
+    provider never pulls a model itself. Verify this tag still exists in
+    Ollama's current library before relying on the default."""
+
+    local_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    """A sentence-transformers model id, downloaded from Hugging Face on
+    first use and cached under ``~/.cache`` thereafter — the one-time
+    download is real network I/O, which is exactly why this provider is
+    never constructed by the test suite."""
+
+    faster_whisper_model: str = "small.en"
+    faster_whisper_compute_type: str = "int8"
+    """CPU-friendly quantization — no GPU assumed for a personal dev
+    machine."""
 
     @field_validator("database_url")
     @classmethod

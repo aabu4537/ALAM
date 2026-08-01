@@ -21,6 +21,9 @@ else (M5.5a task 1) — selecting a paid vendor name is not, by itself,
 enough to reach it. ``ALAM_ALLOW_PAID_PROVIDERS`` must also be true. The $0
 constraint lives here, in code that runs on every resolution, not in
 anyone's memory of which settings to leave alone.
+
+``ollama`` / ``local`` / ``faster_whisper`` (M5.5a task 2) are $0 local
+counterparts, never subject to that gate — see ``ai/providers/local/``.
 """
 
 from __future__ import annotations
@@ -97,6 +100,12 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
                 model=settings.anthropic_model,
             )
         )
+    if settings.llm_provider == "ollama":
+        from alam.ai.providers.local.ollama_llm import OllamaLLM
+
+        return InstrumentedLLMProvider(
+            OllamaLLM(base_url=settings.ollama_base_url, model=settings.ollama_model)
+        )
     raise ValueError(f"unknown llm provider: {settings.llm_provider!r}")
 
 
@@ -117,6 +126,10 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
             api_key=settings.voyage_api_key.get_secret_value(),
             model=settings.voyage_model,
         )
+    if settings.embedding_provider == "local":
+        from alam.ai.providers.local.local_embeddings import LocalEmbeddingProvider
+
+        return LocalEmbeddingProvider(model=settings.local_embedding_model)
     raise ValueError(f"unknown embedding provider: {settings.embedding_provider!r}")
 
 
@@ -136,5 +149,12 @@ def get_stt_provider(settings: Settings | None = None) -> SpeechToTextProvider:
         return OpenAIWhisper(
             api_key=settings.openai_api_key.get_secret_value(),
             model=settings.whisper_model,
+        )
+    if settings.stt_provider == "faster_whisper":
+        from alam.ai.providers.local.faster_whisper_stt import FasterWhisperSTT
+
+        return FasterWhisperSTT(
+            model=settings.faster_whisper_model,
+            compute_type=settings.faster_whisper_compute_type,
         )
     raise ValueError(f"unknown stt provider: {settings.stt_provider!r}")
