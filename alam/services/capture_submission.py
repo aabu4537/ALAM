@@ -3,6 +3,10 @@ resume the reader's active session at the selected chapter, and persist the
 raw audio as a pending capture. Transcription, correction, and extraction are
 separate job handlers (M2 sessions 2-3) — this module only gets a capture
 onto the queue in the same transaction that records it, per rule 5.
+
+Also enqueues prediction resolution (M5) in that same transaction, right
+after the reading session's position advances — that advance is exactly the
+moment a pending prediction's window can newly close.
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from alam.domain.reading_progress import compute_progress
-from alam.jobs.job_types import TRANSCRIBE_CAPTURE
+from alam.jobs.job_types import RESOLVE_PREDICTIONS, TRANSCRIBE_CAPTURE
 from alam.jobs.queue import JobQueue
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
@@ -53,6 +57,10 @@ def submit_capture(
     progress = compute_progress(unit.ordinal, len(units))
     reading_session = ReadingSessionRepository(session).get_or_create_active(
         media_item_id, structure_unit_id=unit.id, ordinal=unit.ordinal, progress=progress
+    )
+
+    JobQueue(session).enqueue(
+        job_type=RESOLVE_PREDICTIONS, payload={"media_item_id": str(media_item_id)}
     )
 
     capture = CaptureRepository(session).create(
