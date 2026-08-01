@@ -52,20 +52,64 @@ def test_settings_are_immutable() -> None:
         ("ALAM_ENV", "nonsense"),
         ("ALAM_WORKER_POLL_INTERVAL_SECONDS", "0"),
         ("ALAM_JOB_MAX_ATTEMPTS", "0"),
+        # Not a valid LLM vendor name — "voyage" and "openai" are real
+        # vendors, just not for this provider kind (M5.5a).
         ("ALAM_LLM_PROVIDER", "openai"),
+        ("ALAM_LLM_PROVIDER", "voyage"),
+        ("ALAM_EMBEDDING_PROVIDER", "anthropic"),
+        ("ALAM_STT_PROVIDER", "anthropic"),
     ],
 )
 def test_invalid_values_are_rejected(
     monkeypatch: pytest.MonkeyPatch, field: str, value: str
 ) -> None:
-    """A bad provider name should fail at startup, not at first call.
-
-    ``openai`` is rejected because M0 ships fakes only — CLAUDE.md rule 8.
-    """
+    """A bad provider name should fail at startup, not at first call."""
     monkeypatch.setenv(field, value)
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+@pytest.mark.parametrize(
+    ("provider_field", "provider_value", "missing_key_env_var"),
+    [
+        ("ALAM_LLM_PROVIDER", "anthropic", "ALAM_ANTHROPIC_API_KEY"),
+        ("ALAM_EMBEDDING_PROVIDER", "voyage", "ALAM_VOYAGE_API_KEY"),
+        ("ALAM_STT_PROVIDER", "openai", "ALAM_OPENAI_API_KEY"),
+    ],
+)
+def test_a_real_provider_without_its_credential_fails_at_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_field: str,
+    provider_value: str,
+    missing_key_env_var: str,
+) -> None:
+    """Selecting a real provider without its API key should fail here, not
+    at the first request that happens to call it (M5.5a)."""
+    monkeypatch.setenv(provider_field, provider_value)
+
+    with pytest.raises(ValidationError, match=missing_key_env_var):
+        Settings()
+
+
+@pytest.mark.parametrize(
+    ("provider_field", "provider_value", "key_env_var"),
+    [
+        ("ALAM_LLM_PROVIDER", "anthropic", "ALAM_ANTHROPIC_API_KEY"),
+        ("ALAM_EMBEDDING_PROVIDER", "voyage", "ALAM_VOYAGE_API_KEY"),
+        ("ALAM_STT_PROVIDER", "openai", "ALAM_OPENAI_API_KEY"),
+    ],
+)
+def test_a_real_provider_with_its_credential_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_field: str,
+    provider_value: str,
+    key_env_var: str,
+) -> None:
+    monkeypatch.setenv(provider_field, provider_value)
+    monkeypatch.setenv(key_env_var, "sk-test-not-a-real-key")
+
+    Settings()  # must not raise
 
 
 @pytest.mark.parametrize(

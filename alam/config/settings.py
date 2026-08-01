@@ -15,9 +15,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "ci", "staging", "production"]
 LogFormat = Literal["json", "console"]
-ProviderKind = Literal["fake"]
-"""M0 ships fakes only. Real provider names join this union when they exist —
-see CLAUDE.md rule 8."""
+LLMProviderKind = Literal["fake", "anthropic"]
+EmbeddingProviderKind = Literal["fake", "voyage"]
+SttProviderKind = Literal["fake", "openai"]
+"""One union per provider kind, not one shared union (M5.5a) — the three
+providers have disjoint real vendors, and a shared ``ProviderKind`` would let
+``ALAM_LLM_PROVIDER=voyage`` type-check as valid when it can never resolve to
+anything. CLAUDE.md rule 8: provider access goes through a Protocol either
+way, so this only constrains which vendor name is even legal in config."""
 
 
 class Settings(BaseSettings):
@@ -123,9 +128,25 @@ class Settings(BaseSettings):
     """
 
     # --- Providers ---
-    llm_provider: ProviderKind = "fake"
-    embedding_provider: ProviderKind = "fake"
-    stt_provider: ProviderKind = "fake"
+    llm_provider: LLMProviderKind = "fake"
+    embedding_provider: EmbeddingProviderKind = "fake"
+    stt_provider: SttProviderKind = "fake"
+
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+    """Verify this against Anthropic's current model list before relying on
+    it — model ids are retired on a schedule this file cannot track for you.
+    """
+
+    voyage_api_key: SecretStr | None = None
+    voyage_model: str = "voyage-3"
+
+    openai_api_key: SecretStr | None = None
+    """Used only for the Whisper STT endpoint (M5.5a) — not an LLM or
+    embedding vendor here. A separate ``openai`` LLM/embedding backend is
+    something to add later, not implied by this key's presence."""
+
+    whisper_model: str = "whisper-1"
 
     @field_validator("database_url")
     @classmethod
@@ -156,6 +177,25 @@ class Settings(BaseSettings):
                 f"job_lease_seconds ({self.job_lease_seconds}) must exceed "
                 f"drain_budget_seconds ({self.drain_budget_seconds}), or a job "
                 f"can be reclaimed while it is still running"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _real_providers_require_credentials(self) -> Settings:
+        """A provider selected without its credential should fail at
+        startup, the same way an unknown provider name already does —
+        not at the first request that happens to call it (M5.5a)."""
+        missing = []
+        if self.llm_provider == "anthropic" and self.anthropic_api_key is None:
+            missing.append("ALAM_ANTHROPIC_API_KEY")
+        if self.embedding_provider == "voyage" and self.voyage_api_key is None:
+            missing.append("ALAM_VOYAGE_API_KEY")
+        if self.stt_provider == "openai" and self.openai_api_key is None:
+            missing.append("ALAM_OPENAI_API_KEY")
+
+        if missing:
+            raise ValueError(
+                "missing required credentials for the configured provider(s): " + ", ".join(missing)
             )
         return self
 
