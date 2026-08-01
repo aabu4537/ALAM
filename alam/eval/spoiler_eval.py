@@ -1,5 +1,9 @@
 """Adversarial spoiler set: leakage rate over ``retrieve_memories`` (M3,
-ADR-0002 Layer 4).
+ADR-0002 Layer 4), and again over ``GET /books/{id}/memories`` (pre-M6
+hardening task 4) — the same cases, run through the real endpoint instead of
+calling the function directly, so a regression in the router or in
+``get_reader_context`` would show up here even if the function itself is
+still correct in isolation.
 
 Every case seeds at least one memory past ``current_ordinal`` chosen to be
 textually as close as possible to the query — near-duplicate phrasing, or in
@@ -15,15 +19,23 @@ definition of visibility, not two that could quietly drift apart.
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
+from fastapi.testclient import TestClient
+
 from alam.ai.retrieval.hybrid import retrieve_memories
+from alam.api.main import create_app
 from alam.domain.reader_context import ReaderContext
 from alam.domain.spoiler_filter import is_visible
 from alam.eval.models import SeedMemory, SpoilerCase, SpoilerCaseResult, SpoilerEvalReport
 from alam.eval.seeding import seed_case_memories
+from alam.persistence.repositories.users import UserRepository
+from alam.persistence.session import session_scope
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
 
 ADVERSARIAL_SPOILER_CASES: tuple[SpoilerCase, ...] = (
@@ -145,6 +157,76 @@ def run_spoiler_eval(
                 label=case.label, leaked=bool(leaked_labels), leaked_labels=leaked_labels
             )
         )
+
+    leakage_rate = sum(1 for r in results if r.leaked) / len(results) if results else 0.0
+    return SpoilerEvalReport(leakage_rate=leakage_rate, results=tuple(results))
+
+
+def run_spoiler_eval_via_endpoint(
+    session: Session,
+    *,
+    cases: tuple[SpoilerCase, ...] = ADVERSARIAL_SPOILER_CASES,
+) -> SpoilerEvalReport:
+    """Same cases and same leakage definition as ``run_spoiler_eval``, but
+    each case is checked by issuing a real ``GET /books/{id}/memories``
+    request rather than calling ``retrieve_memories`` directly —
+    ``session_scope`` is overridden to hand the request this same session
+    (still rolled back by the caller), so this exercises the actual router,
+    ``get_reader_context``, and response serialization, not just the
+    retrieval function in isolation.
+
+    All cases share one owner, created once up front: ``GET
+    /books/{id}/memories`` resolves the owner via ``UserRepository.get_owner``
+    with no id in the request (CLAUDE.md rule 9), so every case's book must
+    belong to that same single owner or it would 404 as someone else's.
+    ``current_ordinal`` is never a request parameter here either — each
+    case's seeded reading session is repositioned to ``case.current_ordinal``
+    so the endpoint resolves the same ordinal the direct-function eval is
+    handed explicitly.
+    """
+
+    def _session_override() -> Iterator[Session]:
+        yield session
+
+    app = create_app()
+    app.dependency_overrides[session_scope] = _session_override
+    owner_id = UserRepository(session).create(display_name="Eval Owner").id
+
+    results = []
+    try:
+        with TestClient(app) as client:
+            for case in cases:
+                book_id, _, by_label = seed_case_memories(
+                    session,
+                    case.memories,
+                    owner_id=owner_id,
+                    current_ordinal=case.current_ordinal,
+                )
+                id_to_label = {memory.id: label for label, memory in by_label.items()}
+
+                response = client.get(
+                    f"/books/{book_id}/memories",
+                    params={"query": case.query, "limit": len(case.memories)},
+                )
+                response.raise_for_status()
+                retrieved_ids = {uuid.UUID(row["id"]) for row in response.json()}
+
+                leaked_labels = tuple(
+                    label
+                    for memory_id, label in id_to_label.items()
+                    if memory_id in retrieved_ids
+                    and not is_visible(
+                        structure_ordinal=by_label[label].structure_ordinal,
+                        current_ordinal=case.current_ordinal,
+                    )
+                )
+                results.append(
+                    SpoilerCaseResult(
+                        label=case.label, leaked=bool(leaked_labels), leaked_labels=leaked_labels
+                    )
+                )
+    finally:
+        app.dependency_overrides.clear()
 
     leakage_rate = sum(1 for r in results if r.leaked) / len(results) if results else 0.0
     return SpoilerEvalReport(leakage_rate=leakage_rate, results=tuple(results))

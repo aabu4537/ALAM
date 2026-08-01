@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from alam.eval.spoiler_eval import run_spoiler_eval
+from alam.eval.spoiler_eval import run_spoiler_eval, run_spoiler_eval_via_endpoint
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -21,6 +21,21 @@ pytestmark = pytest.mark.db
 
 def test_adversarial_spoiler_set_has_zero_leakage(session: Session) -> None:
     report = run_spoiler_eval(session)
+
+    leaked = [r for r in report.results if r.leaked]
+    assert not leaked, f"spoiler leakage in: {leaked}"
+    assert report.leakage_rate == 0.0
+
+
+def test_adversarial_spoiler_set_has_zero_leakage_through_the_real_endpoint(
+    session: Session,
+) -> None:
+    """Same cases, same predicate, run through ``GET /books/{id}/memories``
+    instead of calling ``retrieve_memories`` directly — pre-M6 hardening
+    task 4. A regression that only lived in the router or in
+    ``get_reader_context`` (not in ``retrieve_memories`` itself) would pass
+    ``test_adversarial_spoiler_set_has_zero_leakage`` above and fail here."""
+    report = run_spoiler_eval_via_endpoint(session)
 
     leaked = [r for r in report.results if r.leaked]
     assert not leaked, f"spoiler leakage in: {leaked}"
