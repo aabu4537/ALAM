@@ -36,14 +36,15 @@ distinct id keeps seeded rows identifiable as such if anyone ever queries
 
 def seed_case_memories(
     session: Session, memories: Sequence[SeedMemory]
-) -> tuple[uuid.UUID, dict[str, Memory]]:
+) -> tuple[uuid.UUID, uuid.UUID, dict[str, Memory]]:
     """Creates a fresh owner and book so cases never share ordinal space, then
     one structure unit + capture + memory per ``SeedMemory``, embedded with
     whatever provider ``ALAM_EMBEDDING_PROVIDER`` currently resolves to — the
     same provider ``retrieve_memories`` will use to embed the query, so the
     two vectors are comparable.
 
-    Returns the book's id and a label -> persisted ``Memory`` map, so a case's
+    Returns the book's id, the owner's id (needed to build a
+    ``ReaderContext``), and a label -> persisted ``Memory`` map, so a case's
     ``relevant_labels`` / leakage check can be resolved back to real rows.
     """
     owner = UserRepository(session).create(display_name="Eval")
@@ -98,4 +99,4 @@ def seed_case_memories(
         )
         by_label[seed.label] = memory
 
-    return book.id, by_label
+    return book.id, owner.id, by_label

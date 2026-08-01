@@ -11,6 +11,7 @@ from alam.ai.extraction.memories import ExtractedMemory
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
 from alam.ai.providers.fakes import FakeEmbeddingProvider
 from alam.ai.retrieval.hybrid import retrieve_memories
+from alam.domain.reader_context import ReaderContext
 from alam.persistence.repositories import (
     CaptureRepository,
     MediaItemRepository,
@@ -85,9 +86,10 @@ class TestSpoilerContainment:
         _embed(session, fake, seen)
         _embed(session, fake, spoiler)
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="sandworm attacks", current_ordinal=1
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=1
         )
+        results = retrieve_memories(session, reader_context, query="sandworm attacks")
 
         assert seen.id in {m.id for m in results}
         assert spoiler.id not in {m.id for m in results}
@@ -101,9 +103,10 @@ class TestSpoilerContainment:
         memory = _memory_at(session, book, ordinal=3, content="paul walks the desert")
         _embed(session, fake, memory)
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="paul walks the desert", current_ordinal=3
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=3
         )
+        results = retrieve_memories(session, reader_context, query="paul walks the desert")
 
         assert memory.id in {m.id for m in results}
 
@@ -123,9 +126,8 @@ class TestScoping:
         _embed(session, fake, in_a)
         _embed(session, fake, in_b)
 
-        results = retrieve_memories(
-            session, media_item_id=book_a.id, query="hari seldon predicts", current_ordinal=1
-        )
+        reader_context = ReaderContext(media_item_id=book_a.id, user_id=owner.id, current_ordinal=1)
+        results = retrieve_memories(session, reader_context, query="hari seldon predicts")
 
         assert in_a.id in {m.id for m in results}
         assert in_b.id not in {m.id for m in results}
@@ -151,9 +153,10 @@ class TestScoping:
         # No row for `current`'s model/version exists, so vector search has
         # nothing to match — only full-text search can find it.
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="lone figure desert", current_ordinal=1
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=1
         )
+        results = retrieve_memories(session, reader_context, query="lone figure desert")
 
         assert memory.id in {m.id for m in results}
 
@@ -173,9 +176,10 @@ class TestHybridFusion:
         memory = _memory_at(session, book, ordinal=1, content="Muad'Dib rides the great worm")
         _embed(session, fake, memory)
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="Muad'Dib worm", current_ordinal=1
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=1
         )
+        results = retrieve_memories(session, reader_context, query="Muad'Dib worm")
 
         assert memory.id in {m.id for m in results}
 
@@ -190,9 +194,10 @@ class TestHybridFusion:
             memory = _memory_at(session, book, ordinal=i + 1, content=content)
             _embed(session, fake, memory)
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="desert stretches", current_ordinal=5, limit=2
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=5
         )
+        results = retrieve_memories(session, reader_context, query="desert stretches", limit=2)
 
         assert len(results) == 2
 
@@ -202,8 +207,9 @@ class TestHybridFusion:
         fake = FakeEmbeddingProvider()
         monkeypatch.setattr("alam.ai.retrieval.hybrid.get_embedding_provider", lambda: fake)
 
-        results = retrieve_memories(
-            session, media_item_id=book.id, query="anything at all", current_ordinal=1
+        reader_context = ReaderContext(
+            media_item_id=book.id, user_id=book.user_id, current_ordinal=1
         )
+        results = retrieve_memories(session, reader_context, query="anything at all")
 
         assert results == []

@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from alam.ai.retrieval.hybrid import retrieve_memories
+from alam.domain.reader_context import ReaderContext
 from alam.domain.spoiler_filter import is_visible
 from alam.eval.models import SeedMemory, SpoilerCase, SpoilerCaseResult, SpoilerEvalReport
 from alam.eval.seeding import seed_case_memories
@@ -123,15 +124,14 @@ def run_spoiler_eval(
 ) -> SpoilerEvalReport:
     results = []
     for case in cases:
-        book_id, by_label = seed_case_memories(session, case.memories)
+        book_id, owner_id, by_label = seed_case_memories(session, case.memories)
         id_to_label = {memory.id: label for label, memory in by_label.items()}
+        reader_context = ReaderContext(
+            media_item_id=book_id, user_id=owner_id, current_ordinal=case.current_ordinal
+        )
 
         retrieved = retrieve_memories(
-            session,
-            media_item_id=book_id,
-            query=case.query,
-            current_ordinal=case.current_ordinal,
-            limit=len(case.memories),
+            session, reader_context, query=case.query, limit=len(case.memories)
         )
         leaked_labels = tuple(
             id_to_label[memory.id]

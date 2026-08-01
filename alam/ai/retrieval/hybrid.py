@@ -22,10 +22,9 @@ from alam.domain.spoiler_filter import filter_visible
 from alam.persistence.repositories.retrieval import RetrievalRepository
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.orm import Session
 
+    from alam.domain.reader_context import ReaderContext
     from alam.persistence.models.memory import Memory
 
 DEFAULT_LIMIT = 10
@@ -33,22 +32,26 @@ DEFAULT_LIMIT = 10
 
 def retrieve_memories(
     session: Session,
+    reader_context: ReaderContext,
     *,
-    media_item_id: uuid.UUID,
     query: str,
-    current_ordinal: int,
     limit: int = DEFAULT_LIMIT,
 ) -> list[Memory]:
     """Spoiler-safe hybrid search over one book's memories.
 
-    ``current_ordinal`` comes from the reader's ``ReadingSession`` — nothing
-    at or past it is eligible, enforced twice: once as a SQL predicate in
-    each repository branch (the cheap, primary layer) and again here after
-    fusion (the defense-in-depth layer, ADR-0002).
+    ``reader_context.current_ordinal`` comes from the reader's
+    ``ReadingSession`` — nothing at or past it is eligible, enforced twice:
+    once as a SQL predicate in each repository branch (the cheap, primary
+    layer) and again here after fusion (the defense-in-depth layer,
+    ADR-0002). Taking a ``ReaderContext`` rather than a bare
+    ``media_item_id`` + ``current_ordinal`` pair means a caller can't mix up
+    which ordinal goes with which book.
     """
     settings = get_settings()
     provider = get_embedding_provider()
     repo = RetrievalRepository(session)
+    media_item_id = reader_context.media_item_id
+    current_ordinal = reader_context.current_ordinal
 
     [query_embedding] = provider.embed([query])
 

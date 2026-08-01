@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from alam.ai.retrieval.hybrid import retrieve_memories
+from alam.domain.reader_context import ReaderContext
 from alam.eval.models import RetrievalCase, RetrievalCaseResult, RetrievalEvalReport, SeedMemory
 from alam.eval.seeding import seed_case_memories
 
@@ -131,16 +132,13 @@ def run_retrieval_eval(
 ) -> RetrievalEvalReport:
     results = []
     for case in cases:
-        book_id, by_label = seed_case_memories(session, case.memories)
+        book_id, owner_id, by_label = seed_case_memories(session, case.memories)
+        reader_context = ReaderContext(
+            media_item_id=book_id, user_id=owner_id, current_ordinal=case.current_ordinal
+        )
         retrieved_ids = {
             memory.id
-            for memory in retrieve_memories(
-                session,
-                media_item_id=book_id,
-                query=case.query,
-                current_ordinal=case.current_ordinal,
-                limit=k,
-            )
+            for memory in retrieve_memories(session, reader_context, query=case.query, limit=k)
         }
         relevant = set(case.relevant_labels)
         found = {
