@@ -1,5 +1,7 @@
 """list_predictions_for_book: joins predictions back to their source and
-evidence memories' text for display (M5 session 3)."""
+evidence memories' text for display (M5 session 3), ordinal-scoped by
+ReaderContext rather than by which reading session made or resolved a
+prediction (ADR-0012)."""
 
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ import pytest
 
 from alam.ai.extraction.memories import ExtractedMemory
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
+from alam.domain.reader_context import ReaderContext
 from alam.persistence.models.prediction import PredictionStatus
 from alam.persistence.repositories import (
     CaptureRepository,
@@ -67,9 +70,17 @@ def _make_memory(session: Session, book: MediaItem, *, ordinal: int, content: st
     return memory
 
 
+def _reader_context(book: MediaItem, *, current_ordinal: int) -> ReaderContext:
+    return ReaderContext(
+        media_item_id=book.id, user_id=book.user_id, current_ordinal=current_ordinal
+    )
+
+
 class TestListPredictionsForBook:
     def test_no_predictions_is_an_empty_list(self, session: Session, book: MediaItem) -> None:
-        assert list_predictions_for_book(session, media_item_id=book.id) == []
+        reader_context = _reader_context(book, current_ordinal=10)
+
+        assert list_predictions_for_book(session, reader_context=reader_context) == []
 
     def test_a_pending_prediction_has_no_evidence_yet(
         self, session: Session, book: MediaItem
@@ -81,15 +92,16 @@ class TestListPredictionsForBook:
             made_at_ordinal=1,
             resolution_window=10,
         )
+        reader_context = _reader_context(book, current_ordinal=5)
 
-        [view] = list_predictions_for_book(session, media_item_id=book.id)
+        [view] = list_predictions_for_book(session, reader_context=reader_context)
 
         assert view.statement == "the traitor will be Yueh"
         assert view.status is PredictionStatus.PENDING
         assert view.resolved_at is None
         assert view.evidence == []
 
-    def test_a_resolved_predictions_evidence_is_included(
+    def test_a_resolved_predictions_evidence_is_included_once_the_window_closes(
         self, session: Session, book: MediaItem
     ) -> None:
         source = _make_memory(session, book, ordinal=1, content="the traitor will be Yueh")
@@ -110,12 +122,60 @@ class TestListPredictionsForBook:
             resolution_prompt_version_id="resolve-prediction-v1",
             evidence_memory_ids=[evidence_memory.id],
         )
+        reader_context = _reader_context(book, current_ordinal=11)  # made_at (1) + window (10)
 
-        [view] = list_predictions_for_book(session, media_item_id=book.id)
+        [view] = list_predictions_for_book(session, reader_context=reader_context)
 
         assert view.status is PredictionStatus.CONFIRMED
         assert view.resolved_at == NOW
         assert view.evidence == ["Yueh really did betray them"]
+
+    def test_a_resolved_prediction_stays_pending_before_the_window_closes(
+        self, session: Session, book: MediaItem
+    ) -> None:
+        """The re-read hazard (ADR-0012): resolved during an earlier,
+        further-along session, but this reader's own position hasn't
+        reached the window's close yet — the real outcome must not leak."""
+        source = _make_memory(session, book, ordinal=1, content="the traitor will be Yueh")
+        evidence_memory = _make_memory(
+            session, book, ordinal=2, content="Yueh really did betray them"
+        )
+        predictions = PredictionRepository(session)
+        prediction = predictions.create(
+            source_memory_id=source.id,
+            media_item_id=book.id,
+            made_at_ordinal=1,
+            resolution_window=10,
+        )
+        predictions.resolve(
+            prediction,
+            status=PredictionStatus.CONFIRMED,
+            resolved_at=NOW,
+            resolution_prompt_version_id="resolve-prediction-v1",
+            evidence_memory_ids=[evidence_memory.id],
+        )
+        reader_context = _reader_context(book, current_ordinal=3)  # short of made_at (1) + 10
+
+        [view] = list_predictions_for_book(session, reader_context=reader_context)
+
+        assert view.statement == "the traitor will be Yueh"  # made_at (1) is visible
+        assert view.status is PredictionStatus.PENDING
+        assert view.resolved_at is None
+        assert view.evidence == []
+
+    def test_a_prediction_made_past_the_current_ordinal_is_omitted_entirely(
+        self, session: Session, book: MediaItem
+    ) -> None:
+        source = _make_memory(session, book, ordinal=8, content="the emperor will abdicate")
+        PredictionRepository(session).create(
+            source_memory_id=source.id,
+            media_item_id=book.id,
+            made_at_ordinal=8,
+            resolution_window=2,
+        )
+        reader_context = _reader_context(book, current_ordinal=3)
+
+        assert list_predictions_for_book(session, reader_context=reader_context) == []
 
     def test_ordered_oldest_prediction_first(self, session: Session, book: MediaItem) -> None:
         first_source = _make_memory(session, book, ordinal=1, content="first prediction")
@@ -133,8 +193,9 @@ class TestListPredictionsForBook:
             made_at_ordinal=1,
             resolution_window=10,
         )
+        reader_context = _reader_context(book, current_ordinal=5)
 
-        views = list_predictions_for_book(session, media_item_id=book.id)
+        views = list_predictions_for_book(session, reader_context=reader_context)
 
         assert [v.statement for v in views] == ["first prediction", "second prediction"]
 
@@ -159,7 +220,8 @@ class TestListPredictionsForBook:
             made_at_ordinal=1,
             resolution_window=10,
         )
+        reader_context = _reader_context(book, current_ordinal=5)
 
-        views = list_predictions_for_book(session, media_item_id=book.id)
+        views = list_predictions_for_book(session, reader_context=reader_context)
 
         assert [v.statement for v in views] == ["this book's prediction"]

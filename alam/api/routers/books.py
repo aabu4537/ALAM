@@ -27,6 +27,7 @@ from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
 from alam.services.epub_ingestion import UnknownMediaItemError, commit_epub, preview_epub
 from alam.services.predictions import list_predictions_for_book
+from alam.services.reading_sessions import UnknownReadingSessionError, get_reader_context
 from alam.services.structure_verification import verify_structure
 
 if TYPE_CHECKING:
@@ -182,15 +183,25 @@ def put_structure(
 def get_predictions(
     media_item_id: uuid.UUID, session: Session = Depends(session_scope)
 ) -> list[PredictionResponse]:
-    """Every prediction extracted from this book's reflections, oldest first
-    (M5, ADR-0009) — pending ones alongside confirmed / refuted /
-    unresolvable ones, each with the evidence memories that settled it."""
+    """Predictions extracted from this book's reflections, oldest first (M5,
+    ADR-0009), scoped to the active reading session's current ordinal
+    (ADR-0012) — not by which session made or resolved them. A prediction
+    made past the current position is omitted; one made before it but not
+    yet due for resolution renders ``pending`` with no evidence even if an
+    earlier, further-along session already resolved it. Same shape as
+    ``GET .../memories``: no ordinal is ever a request parameter, and a book
+    with no active reading session 404s rather than falling back to
+    unfiltered history."""
     owner = UserRepository(session).get_owner()
-    item = MediaItemRepository(session).get(media_item_id) if owner else None
-    if item is None or owner is None or item.user_id != owner.id:
+    if owner is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
 
-    predictions = list_predictions_for_book(session, media_item_id=media_item_id)
+    try:
+        reader_context = get_reader_context(session, user_id=owner.id, media_item_id=media_item_id)
+    except UnknownReadingSessionError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    predictions = list_predictions_for_book(session, reader_context=reader_context)
     return [
         PredictionResponse(
             id=str(p.id),

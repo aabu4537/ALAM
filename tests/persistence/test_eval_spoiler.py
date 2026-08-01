@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from alam.eval.prediction_spoiler_eval import run_prediction_reread_spoiler_eval
 from alam.eval.spoiler_eval import run_spoiler_eval, run_spoiler_eval_via_endpoint
 
 if TYPE_CHECKING:
@@ -39,4 +40,15 @@ def test_adversarial_spoiler_set_has_zero_leakage_through_the_real_endpoint(
 
     leaked = [r for r in report.results if r.leaked]
     assert not leaked, f"spoiler leakage in: {leaked}"
+    assert report.leakage_rate == 0.0
+
+
+def test_predictions_have_zero_leakage_across_a_reread(session: Session) -> None:
+    """ADR-0012's re-read case: a completed first read leaves resolved
+    predictions in the database; a re-read at a low ordinal must not see
+    them until it reaches the same points again."""
+    report = run_prediction_reread_spoiler_eval(session)
+
+    leaked = [r for r in report.results if r.leaked]
+    assert not leaked, f"prediction leakage in: {leaked}"
     assert report.leakage_rate == 0.0
