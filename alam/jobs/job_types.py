@@ -28,3 +28,11 @@ EMBED_MEMORIES_BACKFILL = "embed_memories_backfill"
 extraction — a one-time catch-up over existing memories, not the steady-state
 embedding of new ones (ADR-0008). Re-enqueues itself with an advanced cursor
 until the batch it claims comes back short of the configured size."""
+
+CONSOLIDATE_PREFERENCES = "consolidate_preferences"
+"""Triggered weekly by Supabase Cron calling POST
+/internal/preferences/consolidate (ADR-0001, M4) — the schedule itself is
+provisioned in Supabase, not in this repo, same as the drain schedule
+(ADR-0007). Re-enqueues itself for the same user while their backlog is
+full, then moves to the next user with an unconsolidated memory, until none
+remain."""

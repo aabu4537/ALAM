@@ -91,6 +91,20 @@ class Settings(BaseSettings):
     how many batches that takes.
     """
 
+    # --- Profile (M4) ---
+    consolidation_batch_size: int = Field(default=20, ge=1)
+    """Memories weighed against the profile per consolidation job invocation
+    (ADR-0001). One LLM call per batch, so this also bounds prompt size —
+    L3 facts are loaded wholesale into the same call, and a personal
+    library's weekly reflection volume is small, but the cap keeps a large
+    first-run backlog from producing one unbounded prompt.
+    """
+
+    consolidation_initial_confidence: float = Field(default=0.5, ge=0, le=1)
+    """A single observation is moderate evidence, not proof — reinforcement
+    (domain.preference_decay.reinforce) is what moves confidence toward 1 as
+    more observations accumulate."""
+
     # --- Retrieval (M3) ---
     retrieval_candidate_limit: int = Field(default=20, ge=1)
     """Rows fetched per branch (vector, full-text) before RRF fusion narrows

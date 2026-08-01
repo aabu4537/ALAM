@@ -11,10 +11,11 @@ shares the reader's position at record time.
 
 from __future__ import annotations
 
+import datetime as dt
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from alam.persistence.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -74,8 +75,25 @@ class Memory(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     prompt_version_id: Mapped[str] = mapped_column(String(100), nullable=False)
     """Rule 6: every LLM output records the prompt version that produced it."""
 
+    consolidated_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """M4: set once this memory has been through a consolidation pass,
+    whether or not it produced or reinforced a preference fact. Same idiom
+    as ``MediaItem.structure_verified_at`` — NULL means "not yet processed,"
+    not "processed and rejected." Without this, a memory the LLM correctly
+    judged not preference-bearing would resurface in every future run."""
+
     __table_args__ = (
         Index("ix_memories_media_item_id_structure_ordinal", "media_item_id", "structure_ordinal"),
+        # Partial: the consolidation backlog query paginates by id (UUIDv7,
+        # time-ordered) over only unprocessed rows, same reasoning as the
+        # jobs table's claim indexes.
+        Index(
+            "ix_memories_unconsolidated",
+            "id",
+            postgresql_where=text("consolidated_at IS NULL"),
+        ),
     )
 
     def __repr__(self) -> str:

@@ -14,6 +14,10 @@ The embeddings backfill endpoint reuses the drain secret rather than getting
 its own. It enqueues jobs, the same blast radius as draining the queue it
 enqueues them onto — unlike the demo seed endpoint, it writes nothing a
 caller could see or spam beyond what the queue itself already bounds.
+
+The consolidation trigger is the same shape again, same secret: Supabase
+Cron calls it weekly (ADR-0001, M4) — the schedule entry itself lives in
+Supabase, not in this repo, same as the drain schedule (ADR-0007).
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from alam.config.settings import Settings, get_settings
-from alam.jobs.job_types import EMBED_MEMORIES_BACKFILL
+from alam.jobs.job_types import CONSOLIDATE_PREFERENCES, EMBED_MEMORIES_BACKFILL
 from alam.jobs.queue import JobQueue
 from alam.jobs.runner import drain
 from alam.persistence.session import get_session_factory, session_scope
@@ -160,3 +164,27 @@ def trigger_embedding_backfill(
     """
     JobQueue(session).enqueue(job_type=EMBED_MEMORIES_BACKFILL, payload={"after_id": None})
     return EmbeddingBackfillResponse(enqueued=True)
+
+
+class ConsolidationTriggerResponse(BaseModel):
+    enqueued: bool
+
+
+@router.post(
+    "/preferences/consolidate",
+    response_model=ConsolidationTriggerResponse,
+    dependencies=[Depends(require_drain_secret)],
+)
+def trigger_consolidation(
+    session: Session = Depends(session_scope),
+) -> ConsolidationTriggerResponse:
+    """Enqueues one run starting from whichever user has the oldest
+    unconsolidated memory; the job itself finds and chains through every
+    other user with a backlog (``services/consolidation.py``).
+
+    Idempotent to call repeatedly: a call while a run is already in flight,
+    or after one has finished, costs one query and enqueues nothing
+    wasteful in the second case.
+    """
+    JobQueue(session).enqueue(job_type=CONSOLIDATE_PREFERENCES, payload={"user_id": None})
+    return ConsolidationTriggerResponse(enqueued=True)

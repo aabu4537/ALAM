@@ -22,6 +22,8 @@ DEMO_SEED_SECRET = "test-demo-seed-secret"
 
 EMBEDDING_BACKFILL = "/internal/embeddings/backfill"
 
+CONSOLIDATION_TRIGGER = "/internal/preferences/consolidate"
+
 
 @pytest.fixture
 def secured_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
@@ -158,6 +160,42 @@ def test_embedding_backfill_demo_seed_secret_does_not_also_work(
     tests/persistence/test_embedding_backfill.py."""
     response = both_secrets_client.post(
         EMBEDDING_BACKFILL, headers={"Authorization": f"Bearer {DEMO_SEED_SECRET}"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_consolidation_trigger_unconfigured_secret_refuses_rather_than_opens(
+    client: TestClient,
+) -> None:
+    """Reuses require_drain_secret, so an unset secret fails closed the same
+    way the drain endpoint does."""
+    response = client.post(CONSOLIDATION_TRIGGER)
+
+    assert response.status_code == 503
+
+
+def test_consolidation_trigger_missing_credentials_are_rejected(
+    secured_client: TestClient,
+) -> None:
+    assert secured_client.post(CONSOLIDATION_TRIGGER).status_code == 401
+
+
+def test_consolidation_trigger_wrong_secret_is_rejected(secured_client: TestClient) -> None:
+    response = secured_client.post(CONSOLIDATION_TRIGGER, headers={"Authorization": "Bearer wrong"})
+
+    assert response.status_code == 401
+
+
+def test_consolidation_trigger_demo_seed_secret_does_not_also_work(
+    both_secrets_client: TestClient,
+) -> None:
+    """Shares drain_secret, not demo_seed_secret, same reasoning as the
+    embeddings backfill endpoint. No 200-path test here for the same reason
+    those two don't have one — consolidate_preferences is exercised directly
+    against the `session` fixture in tests/persistence/test_consolidation.py."""
+    response = both_secrets_client.post(
+        CONSOLIDATION_TRIGGER, headers={"Authorization": f"Bearer {DEMO_SEED_SECRET}"}
     )
 
     assert response.status_code == 401

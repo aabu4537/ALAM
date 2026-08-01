@@ -4,10 +4,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from alam.persistence.models.media_item import MediaItem
 from alam.persistence.models.memory import Memory, MemoryType
 from alam.persistence.models.memory_embedding import MemoryEmbedding
 
 if TYPE_CHECKING:
+    import datetime as dt
     import uuid
     from collections.abc import Sequence
 
@@ -99,3 +101,42 @@ class MemoryRepository:
         if after_id is not None:
             stmt = stmt.where(Memory.id > after_id)
         return self._session.scalars(stmt).all()
+
+    def list_needing_consolidation(self, *, user_id: uuid.UUID, limit: int) -> Sequence[Memory]:
+        """M4's consolidation backlog: this user's memories with no
+        consolidation pass recorded yet, oldest first (id is UUIDv7,
+        time-ordered — the same cursor idiom ``list_needing_embedding``
+        uses, though here the whole batch is reprocessed per call rather
+        than paginated with an explicit cursor, since a batch is marked
+        ``consolidated_at`` before the next one is fetched)."""
+        return self._session.scalars(
+            select(Memory)
+            .join(MediaItem, MediaItem.id == Memory.media_item_id)
+            .where(MediaItem.user_id == user_id, Memory.consolidated_at.is_(None))
+            .order_by(Memory.id)
+            .limit(limit)
+        ).all()
+
+    def next_user_id_needing_consolidation(
+        self, *, after_user_id: uuid.UUID | None
+    ) -> uuid.UUID | None:
+        """Which user the consolidation job should move to next, once the
+        current one's backlog is empty. Ordered by user id so a full sweep
+        of all users terminates rather than cycling."""
+        stmt = (
+            select(MediaItem.user_id)
+            .join(Memory, Memory.media_item_id == MediaItem.id)
+            .where(Memory.consolidated_at.is_(None))
+            .order_by(MediaItem.user_id)
+            .limit(1)
+        )
+        if after_user_id is not None:
+            stmt = stmt.where(MediaItem.user_id > after_user_id)
+        return self._session.scalars(stmt).first()
+
+    def mark_consolidated(
+        self, memory_ids: Sequence[uuid.UUID], *, consolidated_at: dt.datetime
+    ) -> None:
+        for memory in self._session.scalars(select(Memory).where(Memory.id.in_(memory_ids))):
+            memory.consolidated_at = consolidated_at
+        self._session.flush()
