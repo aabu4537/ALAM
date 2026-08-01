@@ -36,3 +36,12 @@ provisioned in Supabase, not in this repo, same as the drain schedule
 (ADR-0007). Re-enqueues itself for the same user while their backlog is
 full, then moves to the next user with an unconsolidated memory, until none
 remain."""
+
+RESOLVE_PREDICTIONS = "resolve_predictions"
+"""Enqueued by ``services.capture_submission`` every time a capture advances
+a reading session's ``current_ordinal`` (M5, ADR-0009) — that is exactly the
+moment "progress crosses `made_at_ordinal + N`" can become true for some
+pending prediction on that book. Checks all of that book's pending
+predictions and resolves the ones whose window has closed; does not chain,
+since one book's pending-prediction count is small enough to finish in a
+single invocation."""

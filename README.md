@@ -11,7 +11,7 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 through M4 complete.** Deployed and live at
+> **Status: M0 through M5 complete.** Deployed and live at
 > [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
 > yet (that's M7), but the API is real:
 >
@@ -39,16 +39,19 @@ flowchart LR
     D --> E["Weekly<br/>consolidation"]
     E --> F[("Preference profile<br/><code>preference_facts</code>")]
     D --> G{"Retrieval<br/><i>ordinal-filtered · M3</i>"}
-    F --> H["Synthesis<br/><i>briefings · predictions ·<br/>recommendations · M6</i>"]
+    D --> I[("Predictions<br/><code>predictions</code><br/><i>resolve on progress</i>")]
+    F --> H["Synthesis<br/><i>briefings ·<br/>recommendations · M6</i>"]
     G --> H
+    I --> H
 
     style A fill:#1f6feb,color:#fff,stroke:none
     style H fill:#238636,color:#fff,stroke:none
     style D fill:#8957e5,color:#fff,stroke:none
     style F fill:#8957e5,color:#fff,stroke:none
+    style I fill:#8957e5,color:#fff,stroke:none
 ```
 
-**A through F are real** as of M4 — a raw-audio API, not a recording UI
+**A through G, and I are real** as of M5 — a raw-audio API, not a recording UI
 (that's M7); H (synthesis) is still ahead. The pipeline is **deterministic**
 — input → processing → retrieval → synthesis → memory update. There is no
 autonomous agent in V1. Agents are reconsidered at M6, when multiple knowledge
@@ -227,6 +230,7 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `POST /books/{id}/reading-sessions/{id}/end` | Marks a session `completed` or `abandoned` — a DNF is a preference signal, never deleted. |
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
 | `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
+| `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it (M5, ADR-0009). |
 | `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
@@ -246,7 +250,7 @@ a PWA in M7.
 | **M2** | Capture and voice — transcription, entity correction, extraction (PWA recording UI deferred to M7) | ✅ done |
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ✅ done |
 | **M4** | Profile — weekly consolidation, confidence decay, supersede logic, taste drift view | ✅ done |
-| **M5** | Predictions — lifecycle, resolution windows, evidence linking | ⬜ |
+| **M5** | Predictions — lifecycle, progress-triggered resolution windows, evidence memory linking | ✅ done |
 | **M6** | Synthesis — briefings, journey summaries, recommendations | ⬜ |
 | **M7** | Polish — frontend, token/cost accounting, README with real numbers | ⬜ |
 
@@ -273,6 +277,7 @@ consequences, and the alternatives that were rejected.
 | [0006](docs/adr/0006-ordinal-stability.md) | Ordinal stability and structure re-verification |
 | [0007](docs/adr/0007-serverless-worker-execution.md) | Serverless worker execution — `pg_cron`-drained queue, $0/month |
 | [0008](docs/adr/0008-embedding-storage.md) | Embedding storage — a side table, not a column, so models can coexist mid-migration |
+| [0009](docs/adr/0009-prediction-evidence-granularity.md) | Prediction evidence is memories, not content chunks — `content_chunks` still doesn't exist |
 
 ---
 

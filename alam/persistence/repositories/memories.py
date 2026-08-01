@@ -66,6 +66,23 @@ class MemoryRepository:
             .order_by(Memory.structure_ordinal, Memory.created_at)
         ).all()
 
+    def list_in_ordinal_range(
+        self, *, media_item_id: uuid.UUID, from_ordinal: int, to_ordinal: int
+    ) -> Sequence[Memory]:
+        """A prediction's evidence window (M5, ADR-0009): every memory for
+        this book between two ordinals, inclusive on both ends. Bounded, not
+        open-ended — ``domain.prediction_resolution.evidence_window``
+        computes the range."""
+        return self._session.scalars(
+            select(Memory)
+            .where(
+                Memory.media_item_id == media_item_id,
+                Memory.structure_ordinal >= from_ordinal,
+                Memory.structure_ordinal <= to_ordinal,
+            )
+            .order_by(Memory.structure_ordinal, Memory.created_at)
+        ).all()
+
     def resync_ordinal(self, *, structure_unit_id: uuid.UUID, ordinal: int) -> None:
         """Repairs the denormalized ordinal after structure re-verification
         renumbers the unit these memories were extracted at (CLAUDE.md rule 1,
