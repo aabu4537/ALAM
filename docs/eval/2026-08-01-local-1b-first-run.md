@@ -1,4 +1,21 @@
-# Local-provider eval baseline (M5.5a task 3)
+# Local-provider eval baseline — first run, `llama3.2:1b` (superseded)
+
+> **Superseded by [`baseline-local-providers.md`](baseline-local-providers.md).**
+> This is the first-run record, kept verbatim for the history — do not edit
+> the findings below to match later results. This run's diagnosis (a 1B
+> model filling every memory-type category rather than choosing one, and
+> degenerating into repeated tokens under the old `{"type":"json_object"}`
+> mode) directly caused three follow-up changes: `LLMProvider.complete()`
+> gained an optional `response_schema` parameter enforced by real providers
+> and validated by the fakes; the extraction prompt was rewritten
+> (`extract-memories-v1` → `extract-memories-v2`) to state explicitly that
+> a type not present must be omitted, not filled with a placeholder; and
+> `ExtractionEvalReport` split `parse_success_rate` and `type_accuracy` out
+> from the aggregate `accuracy`, so "nothing parsed" and "everything parsed
+> but was wrong" stop looking identical. The current baseline, re-run with
+> all three fixes in place on `llama3.2:3b`, is the linked doc above.
+
+## Original record, 2026-08-01
 
 **Date:** 2026-08-01
 **LLM:** Ollama, `llama3.2:1b` (1.3GB, pulled fresh for this run)

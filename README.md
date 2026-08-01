@@ -89,6 +89,11 @@ that produces a number.
 hand-authored cases engineered to tempt a leak — near-duplicate phrasing, and
 in a few cases identical wording, straddling the ordinal boundary
 ([`alam/eval/spoiler_eval.py`](alam/eval/spoiler_eval.py), enforced in CI).
+The same harness, re-run against a real local embedding model rather than
+the fake, reproduced the identical 0.0
+([`docs/eval/baseline-local-providers.md`](docs/eval/baseline-local-providers.md))
+— expected, since Layer 1 is an ordinal predicate, not a property of
+embedding quality, but confirmed rather than assumed.
 That number is expected and structural, not a lucky sample: Layer 1 is a SQL
 predicate (`WHERE structure_ordinal <= :current`), not a model's probabilistic
 judgment, so leakage at this layer is either always zero or a bug. Layers 2
@@ -358,11 +363,35 @@ Stated up front rather than discovered:
   ([ADR-0004](docs/adr/0004-reading-progress-model.md)).
 - **Single-user by design.** No multi-tenancy, no horizontal scale, no caching
   layer, no read replicas.
-- **Every provider is still a fake.** Transcription, correction, and
-  extraction all run — deterministically, for free, offline — against the
-  fakes from M0. No real STT or LLM is wired up yet; `ProviderKind` in
-  `config/settings.py` permits only `"fake"`, so a real one configured before
-  it exists fails at startup rather than silently.
+- **The deployed instance runs on fakes only, by design.** Paid providers
+  (Anthropic, Voyage AI, OpenAI Whisper) are gated behind
+  `ALLOW_PAID_PROVIDERS`, which defaults to `false` and is unset in
+  production — a paid call is structurally unreachable there regardless of
+  `ALAM_*_PROVIDER`. Local ($0) alternatives (Ollama, sentence-transformers,
+  faster-whisper) exist too, but can't run on Vercel at all: their model
+  weights exceed what's practical to ship in a serverless bundle. Both real
+  paths are implemented and tested; neither is reachable from the live URL.
+- **The first real-provider run found three things a deterministic fake
+  structurally cannot surface.** `FakeLLM` returns whatever a test queues;
+  it can't reveal that a prompt is *ambiguous* to a model that has to guess.
+  A real local model showed exactly that: the memory-type list read as a
+  template to fill in one value per category, and every baseline case came
+  back with fabricated content for all 7-8 types instead of the 1-2 that
+  applied. The same run showed "structured output" had only been requested
+  in English, not enforced by the decoder — and that the eval metric
+  couldn't distinguish a response that never parsed from one that parsed
+  and was wrong, both reported as the same `0.0`. All three are fixed:
+  `complete()` takes an optional `response_schema` that Ollama and Anthropic
+  enforce and the fakes validate against; the prompt now states a type not
+  present must be omitted, not filled with a placeholder; and the eval
+  report separates `parse_success_rate` from `type_accuracy`.
+- **Extraction accuracy is 50% (4/8), on `llama3.2:3b` — the largest model
+  this development machine's 8GB of RAM can run at reasonable speed.** Of
+  the 4 wrong cases, 2 are category misclassification at the correct count
+  (a confusion mistaken for an opinion) and 2 are wrong-count extraction (a
+  spurious extra memory, or one thought split into two fabricated ones). No
+  paid provider has been run against this harness. Full breakdown:
+  [`docs/eval/baseline-local-providers.md`](docs/eval/baseline-local-providers.md).
 - **Re-verifying a chapter that already has a reflection recorded against it
   fails loudly, not gracefully.** `reading_sessions`, `captures`, and
   `memories` all denormalize `structure_ordinal`; relabeling or reordering
