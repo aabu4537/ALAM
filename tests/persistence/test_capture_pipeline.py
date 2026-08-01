@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from alam.jobs.job_types import TRANSCRIBE_CAPTURE
+from alam.jobs.job_types import RESOLVE_PREDICTIONS, TRANSCRIBE_CAPTURE
 from alam.persistence.models.capture import CaptureStatus
 from alam.persistence.models.job import Job, JobStatus
 from alam.persistence.models.reading_session import ReadingSessionStatus
@@ -165,6 +165,21 @@ class TestSubmitCapture:
         assert len(jobs) == 1
         assert jobs[0].payload == {"capture_id": str(capture.id)}
         assert jobs[0].status is JobStatus.PENDING
+
+    def test_also_enqueues_prediction_resolution_for_the_book(
+        self, session: Session, owner: User, book: MediaItem, chapters: list[MediaStructureUnit]
+    ) -> None:
+        submit_capture(
+            session,
+            user_id=owner.id,
+            media_item_id=book.id,
+            structure_unit_id=chapters[0].id,
+            audio=b"one",
+        )
+
+        jobs = session.scalars(select(Job).where(Job.job_type == RESOLVE_PREDICTIONS)).all()
+        assert len(jobs) == 1
+        assert jobs[0].payload == {"media_item_id": str(book.id)}
 
     def test_unknown_media_item_is_rejected(
         self, session: Session, owner: User, chapters: list[MediaStructureUnit]

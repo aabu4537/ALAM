@@ -25,6 +25,7 @@ from alam.jobs.job_types import (
     EMBED_MEMORIES_BACKFILL,
     EXTRACT_MEMORIES,
     NOOP,
+    RESOLVE_PREDICTIONS,
     TRANSCRIBE_CAPTURE,
 )
 from alam.services.capture_pipeline import (
@@ -34,6 +35,7 @@ from alam.services.capture_pipeline import (
 )
 from alam.services.consolidation import consolidate_preferences
 from alam.services.embedding_backfill import embed_memories_backfill
+from alam.services.prediction_resolution import resolve_due_predictions
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -44,6 +46,7 @@ __all__ = [
     "EMBED_MEMORIES_BACKFILL",
     "EXTRACT_MEMORIES",
     "NOOP",
+    "RESOLVE_PREDICTIONS",
     "TRANSCRIBE_CAPTURE",
     "JobHandler",
     "UnknownJobTypeError",
@@ -101,3 +104,4 @@ register(CORRECT_TRANSCRIPT, correct_transcript)
 register(EXTRACT_MEMORIES, extract_memories)
 register(EMBED_MEMORIES_BACKFILL, embed_memories_backfill)
 register(CONSOLIDATE_PREFERENCES, consolidate_preferences)
+register(RESOLVE_PREDICTIONS, resolve_due_predictions)
