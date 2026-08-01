@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-07-31
 
-## Implementation status (as of 2026-08-01)
+## Implementation status (as of 2026-08-01, updated for M6 session 1)
 
 **Decided and implemented:** Layer 1 — `domain/spoiler_filter.py`'s
 `is_visible`/`filter_visible`, enforced as an index-only SQL predicate in
@@ -13,16 +13,26 @@ exists, runs in CI, and reads `leakage_rate=0.0` as expected — but at
 **10 adversarial cases**, not the "roughly 200" this ADR names as the
 target. The mechanism is real; the scale is not there yet.
 
-**Decided, not implemented:** Layer 2 (a system prompt stating the reader's
-current position) and Layer 3 (a second-pass classifier checking a draft
-response against retrieved-but-excluded content) — neither exists, because
-neither has a caller yet. Both apply to a *synthesis response*
-(a briefing, a journey summary, a recommendation's explanation), and no
-such response is generated anywhere in the codebase — that's M6
-(`docs/milestones.md`), not built. This ADR's "Negative" consequences
-section already anticipated this ("Layer 3 adds a model call and latency
-to every synthesis response") without flagging that no such response
-existed yet to add it to.
+**Decided and implemented, see ADR-0013:** Layer 2 (a system prompt stating
+the reader's current position) and Layer 3 (a second-pass classifier
+checking a draft response against retrieved-but-excluded content). Both
+were "Decided, not implemented" as of 2026-08-01's initial version of this
+section, because neither had a caller — no synthesis response existed
+anywhere in the codebase yet. `alam/services/journey_summary.py` (M6
+session 1) is that first caller: `ai/prompts/journey_summary.py` states the
+reader's position explicitly (Layer 2), and `ai/synthesis/leak_check.py`
+checks the generated draft against the exact memory content the ordinal
+filter excluded from it (Layer 3), via a schema-constrained classifier
+call, not a second freeform generation. ADR-0013 records the design and
+the rationale for shipping Layer 3 now rather than staying deferred: Layer
+1's `leakage_rate=0.0` measures retrieval, not generation, and M6 is the
+first milestone where a model generating prose from only-permitted input
+can still leak a future event by inference. `synthesis_leakage_rate`
+(`alam/eval/journey_summary_eval.py`) is the corresponding Layer 4 case.
+This ADR's "Negative" consequences section already anticipated the Layer 3
+cost ("adds a model call and latency to every synthesis response") without
+flagging that no such response existed yet to add it to — that gap is now
+closed.
 
 ## Finding (2026-08-01): the four-layer claim was never retrofitted onto routes that predate it
 
