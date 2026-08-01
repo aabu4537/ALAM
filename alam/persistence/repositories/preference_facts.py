@@ -16,6 +16,13 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
+class AlreadySupersededError(ValueError):
+    """Raised by ``supersede`` when the fact it was handed is already
+    retired. Without this guard, superseding the same fact twice would give
+    it two direct successors — a branch, not the linear chain
+    ``domain/taste_drift.py`` assumes and the taste-drift view renders."""
+
+
 class PreferenceFactRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -51,6 +58,17 @@ class PreferenceFactRepository:
         return self._session.scalars(
             select(PreferenceFact)
             .where(PreferenceFact.user_id == user_id, PreferenceFact.superseded_at.is_(None))
+            .order_by(PreferenceFact.created_at)
+        ).all()
+
+    def list_all_for_user(self, user_id: uuid.UUID) -> Sequence[PreferenceFact]:
+        """Active and superseded facts alike, oldest first — the raw
+        material ``domain.taste_drift.group_into_chains`` groups into
+        lineages for display. ``list_active_for_user`` is for callers that
+        only care about the profile as it stands right now."""
+        return self._session.scalars(
+            select(PreferenceFact)
+            .where(PreferenceFact.user_id == user_id)
             .order_by(PreferenceFact.created_at)
         ).all()
 
@@ -90,6 +108,10 @@ class PreferenceFactRepository:
         rather than overwriting it. ``old_fact`` is retained with
         ``superseded_at`` set, never deleted — this is what makes taste
         drift queryable (ADR-0001)."""
+        if old_fact.superseded_at is not None:
+            raise AlreadySupersededError(
+                f"preference fact {old_fact.id} was already superseded at {old_fact.superseded_at}"
+            )
         old_fact.superseded_at = observed_at
         new_fact = PreferenceFact(
             user_id=old_fact.user_id,

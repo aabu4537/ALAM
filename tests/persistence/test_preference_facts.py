@@ -21,6 +21,7 @@ from alam.persistence.repositories import (
     StructureUnitRepository,
     UserRepository,
 )
+from alam.persistence.repositories.preference_facts import AlreadySupersededError
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -238,6 +239,59 @@ class TestSupersede:
         assert v3.supersedes_id == v2.id
         assert v2.supersedes_id == v1.id
         assert v1.supersedes_id is None
+
+    def test_superseding_an_already_superseded_fact_raises(
+        self, session: Session, owner: User
+    ) -> None:
+        """Otherwise the same fact could end up with two direct successors —
+        a branch, not the linear chain the taste-drift view assumes."""
+        facts = PreferenceFactRepository(session)
+        old = facts.create(
+            user_id=owner.id,
+            statement="dislikes slow openings",
+            base_confidence=0.6,
+            observed_at=NOW,
+            evidence_memory_ids=[],
+        )
+        facts.supersede(
+            old,
+            statement="neutral on slow openings",
+            base_confidence=0.5,
+            observed_at=NOW + dt.timedelta(days=100),
+            evidence_memory_ids=[],
+        )
+
+        with pytest.raises(AlreadySupersededError):
+            facts.supersede(
+                old,
+                statement="a second, conflicting successor",
+                base_confidence=0.5,
+                observed_at=NOW + dt.timedelta(days=200),
+                evidence_memory_ids=[],
+            )
+
+    def test_list_all_for_user_includes_active_and_superseded(
+        self, session: Session, owner: User
+    ) -> None:
+        facts = PreferenceFactRepository(session)
+        old = facts.create(
+            user_id=owner.id,
+            statement="dislikes slow openings",
+            base_confidence=0.6,
+            observed_at=NOW,
+            evidence_memory_ids=[],
+        )
+        new = facts.supersede(
+            old,
+            statement="neutral on slow openings",
+            base_confidence=0.5,
+            observed_at=NOW + dt.timedelta(days=100),
+            evidence_memory_ids=[],
+        )
+
+        all_facts = facts.list_all_for_user(owner.id)
+
+        assert {f.id for f in all_facts} == {old.id, new.id}
 
 
 class TestEvidenceCascade:
