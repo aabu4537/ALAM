@@ -1,18 +1,21 @@
-"""Recommendation draft shape (M6 session 2, ADR-0014).
+"""Recommendation draft shape (M6 session 2, ADR-0014; widened M6 session 3,
+ADR-0015).
 
 Parses and validates an LLM's schema-constrained response. Pure — no I/O, no
 ORM — same reasoning ``ai/synthesis/journey_summary.py`` gives.
 
 The schema is a **selection, not prose**: which candidate, backed by which
-of the reader's own ``preference_fact``/``memory`` ids. There is no
-free-text field anywhere in it for the model to write a new sentence about
-a candidate's content into — the same move
-``VisibleStructureUnitResponse`` makes by omitting ``first_lines``, no
-field for unsourced content to occupy. This is what makes a hallucinated
-characterization of a to-read book structurally unrepresentable rather than
-merely detected after the fact; ``domain/recommendation_groundedness.py``
-only has to check that cited *ids* are real, since there is nothing else
-left in the shape to check.
+of the reader's own ``preference_fact``/``memory`` ids, or — now that
+``CatalogProvider`` exists — the candidate's own fetched ``catalog`` entry.
+There is no free-text field anywhere in it for the model to write a new
+sentence into — the same move ``VisibleStructureUnitResponse`` makes by
+omitting ``first_lines``, no field for unsourced content to occupy. This is
+what makes a hallucinated characterization structurally unrepresentable
+rather than merely detected after the fact, for *any* citation type, not
+just the two taste-only ones session 2 shipped with;
+``domain/recommendation_groundedness.py`` only has to check that cited
+*ids* are real (or, for ``"catalog"``, that the candidate actually has a
+fetched entry), since there is nothing else left in the shape to check.
 """
 
 from __future__ import annotations
@@ -26,8 +29,12 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 class CitationRef(BaseModel):
     model_config = {"frozen": True}
 
-    type: Literal["preference_fact", "memory"]
+    type: Literal["preference_fact", "memory", "catalog"]
     id: str
+    """For ``"catalog"``, this is the candidate's own ``media_item_id`` —
+    there is exactly one fetched catalog entry per book, unlike facts and
+    memories, so citing "the candidate's own metadata" needs no separate id
+    space."""
 
 
 class RecommendationDraft(BaseModel):

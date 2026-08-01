@@ -1,12 +1,16 @@
-"""Recommendation generation and retrieval (M6 session 2, ADR-0014).
+"""Recommendation generation and retrieval (M6 session 2, ADR-0014; widened
+M6 session 3, ADR-0015).
 
 Library-wide, not book-scoped — no ``ReaderContext``, resolved by
 ``user_id`` alone, same as ``services/taste_drift.py``. Candidates are the
 reader's own to-read shelf; the LLM selects which of them to recommend and
-which of the reader's own facts/memories support each selection (never
-prose about the candidate itself — see ``ai/synthesis/recommendations.py``
-and ADR-0014). The displayed claim text is composed here, from the cited
-record's own stored text, never from anything the LLM wrote.
+which of the reader's own facts/memories — or, for a candidate
+``CatalogProvider`` has already fetched, its own catalog entry — support
+each selection (never prose about the candidate itself — see
+``ai/synthesis/recommendations.py`` and ADR-0014). The displayed claim text
+is composed here, from the cited record's own stored text, never from
+anything the LLM wrote — a catalog claim's text is Open Library's blurb,
+not the recommendation LLM's.
 
 Row lifecycle, same commit/rollback discipline
 ``services/journey_summary.py`` established (and the bug session 1 found
@@ -112,6 +116,33 @@ def _to_read_shelf(session: Session, *, user_id: uuid.UUID) -> Sequence[MediaIte
     return [item for item in items if item.attributes.get("exclusive_shelf") == "to-read"]
 
 
+def _catalog_entry(item: MediaItem) -> dict[str, Any] | None:
+    entry = item.attributes.get("catalog")
+    return entry if isinstance(entry, dict) else None
+
+
+def _has_catalog_content(item: MediaItem) -> bool:
+    """``attributes["catalog"]`` existing isn't enough — a definite
+    "checked, found nothing" result (``blurb=None``, ``subjects=[]``) has
+    nothing a ``"catalog"`` citation could actually reference (M6 session
+    3, ADR-0015)."""
+    entry = _catalog_entry(item)
+    if entry is None:
+        return False
+    return bool(entry.get("blurb")) or bool(entry.get("subjects"))
+
+
+def _candidate_book(item: MediaItem) -> CandidateBook:
+    entry = _catalog_entry(item)
+    return CandidateBook(
+        media_item_id=str(item.id),
+        title=item.title,
+        author=item.attributes.get("author"),
+        blurb=(entry.get("blurb") if entry else None),
+        subjects=tuple(entry.get("subjects", []) if entry else ()),
+    )
+
+
 def _generate(
     session: Session,
     *,
@@ -146,17 +177,11 @@ def _generate(
     session.commit()  # durable before the LLM call — see the module docstring
 
     memories = MemoryRepository(session).list_for_user(user_id)
+    catalog_media_item_ids = frozenset(str(item.id) for item in shelf if _has_catalog_content(item))
 
     try:
         prompt = build_recommendations_prompt(
-            candidates=[
-                CandidateBook(
-                    media_item_id=str(item.id),
-                    title=item.title,
-                    author=item.attributes.get("author"),
-                )
-                for item in shelf
-            ],
+            candidates=[_candidate_book(item) for item in shelf],
             facts=[FactForPrompt(id=str(f.id), statement=f.statement) for f in facts],
             memories=[MemoryForPrompt(id=str(m.id), content=m.content) for m in memories],
         )
@@ -176,6 +201,7 @@ def _generate(
             citation_checks,
             valid_fact_ids=frozenset(str(f.id) for f in facts),
             valid_memory_ids=frozenset(str(m.id) for m in memories),
+            valid_catalog_media_item_ids=catalog_media_item_ids,
         )
     except Exception as exc:
         # Same idiom `services/journey_summary.py` uses: rollback first to
@@ -243,11 +269,7 @@ def _resolve_candidates(
             continue
         claims = [
             {
-                "text": (
-                    fact_by_id[c.id].statement
-                    if c.type == "preference_fact"
-                    else memory_by_id[c.id].content
-                ),
+                "text": _claim_text(c, book=book, fact_by_id=fact_by_id, memory_by_id=memory_by_id),
                 "cites_type": c.type,
                 "cites_id": c.id,
             }
@@ -255,3 +277,28 @@ def _resolve_candidates(
         ]
         resolved.append({"media_item_id": rec.media_item_id, "title": book.title, "claims": claims})
     return resolved
+
+
+def _claim_text(
+    citation: Any,
+    *,
+    book: MediaItem,
+    fact_by_id: dict[str, PreferenceFact],
+    memory_by_id: dict[str, Memory],
+) -> str:
+    """Every claim's displayed text is copied verbatim from the cited
+    record's own stored text — never composed or paraphrased here, and
+    never anything the LLM wrote (ADR-0014). A ``"catalog"`` citation's
+    text is Open Library's own blurb (falling back to a subjects summary
+    when there's no blurb but subjects exist) — real text ALAM fetched
+    before this call ran, same discipline as a fact/memory citation."""
+    if citation.type == "preference_fact":
+        return fact_by_id[citation.id].statement
+    if citation.type == "memory":
+        return memory_by_id[citation.id].content
+    entry = _catalog_entry(book) or {}
+    blurb = entry.get("blurb")
+    if blurb:
+        return str(blurb)
+    subjects = entry.get("subjects", [])
+    return f"Subjects: {', '.join(subjects)}."

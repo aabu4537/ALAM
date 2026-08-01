@@ -57,8 +57,59 @@ class TestBuildRecommendationsPrompt:
 
         assert "NO information" in prompt
 
+    def test_a_candidate_with_no_catalog_data_has_no_known_line(self) -> None:
+        prompt = build_recommendations_prompt(
+            candidates=[CandidateBook(media_item_id="book-1", title="Dune", author=None)],
+            facts=[],
+            memories=[],
+        )
+
+        # The instructions mention the "Known:" convention generally; what
+        # matters is that this specific candidate's own line doesn't carry
+        # one, since it has no catalog data.
+        assert "\n  Known:" not in prompt
+
+    def test_a_candidate_with_a_blurb_gets_a_known_line(self) -> None:
+        prompt = build_recommendations_prompt(
+            candidates=[
+                CandidateBook(
+                    media_item_id="book-1",
+                    title="Dune",
+                    author=None,
+                    blurb="A desert planet and the boy who would rule it.",
+                )
+            ],
+            facts=[],
+            memories=[],
+        )
+
+        assert "Known:" in prompt
+        assert "A desert planet and the boy who would rule it." in prompt
+
+    def test_a_candidate_with_subjects_lists_them_in_the_known_line(self) -> None:
+        prompt = build_recommendations_prompt(
+            candidates=[
+                CandidateBook(
+                    media_item_id="book-1",
+                    title="Dune",
+                    author=None,
+                    subjects=["Science fiction", "Politics"],
+                )
+            ],
+            facts=[],
+            memories=[],
+        )
+
+        assert "Science fiction" in prompt
+        assert "Politics" in prompt
+
+    def test_mentions_catalog_as_a_citable_type(self) -> None:
+        prompt = build_recommendations_prompt(candidates=[], facts=[], memories=[])
+
+        assert '"catalog"' in prompt
+
     def test_prompt_version_id_is_stable(self) -> None:
         """Rule 6: every LLM output records the prompt version that produced
         it. If this changes, it must change deliberately, alongside the
         template text — not silently."""
-        assert PROMPT_VERSION_ID == "recommendations-v1"
+        assert PROMPT_VERSION_ID == "recommendations-v2"

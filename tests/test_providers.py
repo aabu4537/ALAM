@@ -22,6 +22,8 @@ from alam.ai.providers import (
     get_llm_provider,
     get_stt_provider,
 )
+from alam.catalog import CatalogProvider, FakeCatalogProvider, get_catalog_provider
+from alam.catalog.provider import CatalogMetadata
 
 PROMPT_V = "extract-memories@v1"
 
@@ -31,6 +33,7 @@ class TestProtocolConformance:
         assert isinstance(FakeLLM(), LLMProvider)
         assert isinstance(FakeEmbeddingProvider(), EmbeddingProvider)
         assert isinstance(FakeSpeechToText(), SpeechToTextProvider)
+        assert isinstance(FakeCatalogProvider(), CatalogProvider)
 
     def test_resolvers_return_the_fakes(self) -> None:
         """``get_llm_provider()`` wraps the fake in ``InstrumentedLLMProvider``
@@ -41,6 +44,7 @@ class TestProtocolConformance:
         assert isinstance(llm.inner, FakeLLM)
         assert isinstance(get_embedding_provider(), FakeEmbeddingProvider)
         assert isinstance(get_stt_provider(), FakeSpeechToText)
+        assert isinstance(get_catalog_provider(), FakeCatalogProvider)
 
     def test_callers_can_depend_on_the_protocol_alone(self) -> None:
         """Type-level intent, checked at runtime: a service should accept any
@@ -213,6 +217,57 @@ class TestSpeechToText:
         assert stt.calls[0].entities == ()
 
 
+class TestCatalog:
+    def test_default_metadata_is_derived_from_the_title(self) -> None:
+        provider = FakeCatalogProvider()
+
+        result = provider.fetch_metadata(title="Dune", author="Frank Herbert")
+
+        assert result is not None
+        assert result.blurb is not None
+        assert "Dune" in result.blurb
+
+    def test_same_title_gives_the_same_default_metadata(self) -> None:
+        a = FakeCatalogProvider().fetch_metadata(title="Dune", author=None)
+        b = FakeCatalogProvider().fetch_metadata(title="Dune", author=None)
+
+        assert a == b
+
+    def test_queued_responses_are_returned_in_order(self) -> None:
+        first = CatalogMetadata(blurb="first blurb", subjects=["sci-fi"], series=None)
+        second = CatalogMetadata(blurb="second blurb", subjects=[], series="Dune")
+        provider = FakeCatalogProvider(responses=[first, second])
+
+        assert provider.fetch_metadata(title="x", author=None) == first
+        assert provider.fetch_metadata(title="y", author=None) == second
+
+    def test_a_queued_none_simulates_a_real_not_found_result(self) -> None:
+        provider = FakeCatalogProvider(responses=[None])
+
+        assert provider.fetch_metadata(title="Unfindable Book", author=None) is None
+
+    def test_calls_are_recorded_for_assertion(self) -> None:
+        provider = FakeCatalogProvider()
+        provider.fetch_metadata(title="Dune", author="Frank Herbert")
+
+        assert len(provider.calls) == 1
+        assert provider.calls[0].title == "Dune"
+        assert provider.calls[0].author == "Frank Herbert"
+
+    def test_failure_can_be_forced(self) -> None:
+        provider = FakeCatalogProvider(fail_with=ProviderError("catalog is down"))
+
+        with pytest.raises(ProviderError, match="catalog is down"):
+            provider.fetch_metadata(title="x", author=None)
+
+    def test_metadata_is_immutable(self) -> None:
+        result = FakeCatalogProvider().fetch_metadata(title="Dune", author=None)
+
+        assert result is not None
+        with pytest.raises(Exception):  # noqa: B017 - pydantic ValidationError
+            result.blurb = "tampered"  # type: ignore[misc]
+
+
 class TestNoNetwork:
     """Rule 8, enforced rather than asserted.
 
@@ -233,6 +288,7 @@ class TestNoNetwork:
         assert FakeLLM().complete("x", prompt_version_id=PROMPT_V).text
         assert FakeEmbeddingProvider().embed(["x"])[0].vector
         assert FakeSpeechToText().transcribe(b"x").text
+        assert FakeCatalogProvider().fetch_metadata(title="x", author=None)
 
     def test_the_guard_itself_works(self) -> None:
         """Without this, the test above would pass even if the patch silently

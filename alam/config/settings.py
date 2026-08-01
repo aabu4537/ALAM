@@ -18,6 +18,12 @@ LogFormat = Literal["json", "console"]
 LLMProviderKind = Literal["fake", "anthropic", "ollama"]
 EmbeddingProviderKind = Literal["fake", "voyage", "local"]
 SttProviderKind = Literal["fake", "openai", "faster_whisper"]
+CatalogProviderKind = Literal["fake", "open_library"]
+"""Not one of the three AI provider kinds above — ``CatalogProvider``
+(``alam/catalog/``, M6 session 3) is a bibliographic metadata lookup, not a
+model capability, so it isn't subject to ``PAID_PROVIDER_KINDS`` at all.
+Open Library is free and keyless; ``open_library`` never needs
+``ALAM_ALLOW_PAID_PROVIDERS``."""
 """One union per provider kind, not one shared union (M5.5a) — the three
 providers have disjoint real vendors, and a shared ``ProviderKind`` would let
 ``ALAM_LLM_PROVIDER=voyage`` type-check as valid when it can never resolve to
@@ -107,6 +113,13 @@ class Settings(BaseSettings):
     how many batches that takes.
     """
 
+    catalog_backfill_batch_size: int = Field(default=20, ge=1)
+    """Media items processed per catalog backfill job invocation (M6
+    session 3, ADR-0015). Smaller than ``embedding_backfill_batch_size`` —
+    embeddings batch one provider call across many memories; a catalog
+    fetch is one HTTP round-trip per book, no batch endpoint to share it
+    across."""
+
     # --- Profile (M4) ---
     consolidation_batch_size: int = Field(default=20, ge=1)
     """Memories weighed against the profile per consolidation job invocation
@@ -142,6 +155,7 @@ class Settings(BaseSettings):
     llm_provider: LLMProviderKind = "fake"
     embedding_provider: EmbeddingProviderKind = "fake"
     stt_provider: SttProviderKind = "fake"
+    catalog_provider: CatalogProviderKind = "fake"
 
     allow_paid_providers: bool = False
     """Fail-closed gate on every kind in ``PAID_PROVIDER_KINDS`` (M5.5a task

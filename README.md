@@ -114,22 +114,37 @@ It will be revisited, and likely get worse before it gets better, once a
 real provider backs Layer 3 (see [ADR-0013](docs/adr/0013-synthesis-artifacts-and-layer3.md)).
 
 `GET /recommendations` (M6 session 2) doesn't reuse Layer 3 — recommendations
-are library-wide with no reader ordinal and no `CatalogProvider` yet, so
-there is no excluded-content set for a classifier to check a draft against.
-Instead the response schema is built so an LLM-authored characterization of
-a to-read candidate's plot, genre, or themes has no field to occupy at all:
-the model only selects which of the reader's own `preference_facts`/
-`memories` support a recommendation, and every claim's displayed text is
-composed by ALAM from that cited record's own stored text, never written by
-the model. **Measured `recommendation_groundedness`: 0.0 ungrounded**, over
-a clean-citation case and a deliberately-bad-citation positive control
-([`alam/eval/recommendation_eval.py`](alam/eval/recommendation_eval.py),
+are library-wide with no reader ordinal, so there is no excluded-content set
+for a classifier to check a draft against. Instead the response schema is
+built so an LLM-authored characterization of a to-read candidate's content
+has no field to occupy at all: the model only selects which of the reader's
+own `preference_facts`/`memories` — or, for a candidate `CatalogProvider`
+(M6 session 3) has already fetched, its own catalog entry — support a
+recommendation, and every claim's displayed text is composed by ALAM from
+that cited record's own stored text, never written by the model. A
+candidate's fetched blurb/subjects is real, Open Library-sourced text; a
+candidate not yet backfilled is still exactly taste-only, degrading
+gracefully rather than erroring. **Measured `recommendation_groundedness`:
+0.0 ungrounded**, over a clean-citation case and a deliberately-bad-citation
+positive control ([`alam/eval/recommendation_eval.py`](alam/eval/recommendation_eval.py),
 enforced in CI) — fully deterministic (existence + ownership check against
-the DB), unlike Layer 3, so this number is real regardless of which LLM
-provider is configured. Recommendations are deliberately taste-only until
-`CatalogProvider` (M6 session 3) gives ALAM an actual source for a
-candidate's content (see
-[ADR-0014](docs/adr/0014-recommendations-groundedness-taste-only.md)).
+the DB, extended in session 3 to also check that a cited catalog entry
+actually has content), unlike Layer 3, so this number is real regardless of
+which LLM provider is configured. Full design in
+[ADR-0014](docs/adr/0014-recommendations-groundedness-taste-only.md) and
+[ADR-0015](docs/adr/0015-catalog-provider.md).
+
+`CatalogProvider` (`alam/catalog/`) is a narrow, one-method Protocol —
+`fetch_metadata(title, author)` — deliberately not the deferred
+`MediaProvider` (`media/base.py`). The real implementation calls Open
+Library's free, keyless API; a resumable job-queue backfill
+(`POST /internal/catalog/backfill`, same shape as the embeddings backfill)
+fetches and caches metadata into `media_items.attributes["catalog"]`, once
+per book, a real "not found" result recorded distinctly from "never
+checked." **Not verified against a live Open Library call** — written
+against the published API shape, same caveat
+[`voyage_embeddings.py`](alam/ai/providers/real/voyage_embeddings.py)
+carries for its own real client.
 
 Layer 1's coverage isn't limited to `retrieve_memories`. Every reader-facing
 route that returns media-derived content — memories, predictions, chapters —
@@ -281,8 +296,8 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
 | `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it, masked back to pending until the resolution window closes relative to the reader's own position (M5, ADR-0009; ADR-0012). |
 | `GET /books/{id}/journey-summary` | A short narrative of the reader's journey through this book so far, generated on demand from their own memories and predictions and cached until stale. Checked against everything the ordinal filter excluded before it's ever returned (M6 session 1, ADR-0002 Layers 2–3, ADR-0013). A generation the check flags is never served — 503, not the leaked draft. |
-| `GET /recommendations` | The reader's own to-read shelf, filtered to what best matches their recorded taste — every claim cites a specific `preference_fact`/`memory` id, displayed text copied from that record, never written by the model (M6 session 2, ADR-0014). Taste-only: makes no claim about a candidate's own content until `CatalogProvider` exists. A citation that doesn't check out blocks the whole set — 503, never a partial response. |
-| `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate` | Ops-only, bearer-secret protected. |
+| `GET /recommendations` | The reader's own to-read shelf, filtered to what best matches their recorded taste — every claim cites a specific `preference_fact`/`memory` id, or (once a candidate is catalog-backfilled) its own real `catalog` entry, displayed text copied from that record, never written by the model (M6 sessions 2–3, ADR-0014, ADR-0015). A citation that doesn't check out blocks the whole set — 503, never a partial response. |
+| `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate`, `/internal/catalog/backfill` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
 — each independently retryable on the M0 queue rather than one long request.
@@ -302,7 +317,7 @@ a PWA in M7.
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ✅ done |
 | **M4** | Profile — weekly consolidation, confidence decay, supersede logic, taste drift view | ✅ done |
 | **M5** | Predictions — lifecycle, progress-triggered resolution windows, evidence memory linking | ✅ done |
-| **M6** | Synthesis — briefings, journey summaries, recommendations | 🟨 in progress (journey summaries, recommendations done; `CatalogProvider`, briefings next) |
+| **M6** | Synthesis — briefings, journey summaries, recommendations | 🟨 in progress (journey summaries, recommendations, `CatalogProvider` done; briefings next) |
 | **M7** | Polish — frontend, token/cost accounting, README with real numbers | ⬜ |
 
 M3 is the milestone that makes this a portfolio project rather than a personal

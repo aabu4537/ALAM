@@ -45,3 +45,11 @@ pending prediction on that book. Checks all of that book's pending
 predictions and resolves the ones whose window has closed; does not chain,
 since one book's pending-prediction count is small enough to finish in a
 single invocation."""
+
+FETCH_CATALOG_METADATA = "fetch_catalog_metadata"
+"""Triggered on demand (POST /internal/catalog/backfill), not chained from
+anywhere — a one-time catch-up over existing media items missing
+``attributes["catalog"]`` (M6 session 3, ADR-0015), same resumable
+cursor/re-enqueue shape ``EMBED_MEMORIES_BACKFILL`` uses. Re-enqueues
+itself with an advanced cursor until the batch it claims comes back short
+of the configured size."""

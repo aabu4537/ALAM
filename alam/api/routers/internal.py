@@ -29,7 +29,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from alam.config.settings import Settings, get_settings
-from alam.jobs.job_types import CONSOLIDATE_PREFERENCES, EMBED_MEMORIES_BACKFILL
+from alam.jobs.job_types import (
+    CONSOLIDATE_PREFERENCES,
+    EMBED_MEMORIES_BACKFILL,
+    FETCH_CATALOG_METADATA,
+)
 from alam.jobs.queue import JobQueue
 from alam.jobs.runner import drain
 from alam.persistence.session import get_session_factory, session_scope
@@ -188,3 +192,27 @@ def trigger_consolidation(
     """
     JobQueue(session).enqueue(job_type=CONSOLIDATE_PREFERENCES, payload={"user_id": None})
     return ConsolidationTriggerResponse(enqueued=True)
+
+
+class CatalogBackfillResponse(BaseModel):
+    enqueued: bool
+
+
+@router.post(
+    "/catalog/backfill",
+    response_model=CatalogBackfillResponse,
+    dependencies=[Depends(require_drain_secret)],
+)
+def trigger_catalog_backfill(session: Session = Depends(session_scope)) -> CatalogBackfillResponse:
+    """Enqueues the first batch job; the drain schedule does the rest (M6
+    session 3, ADR-0015).
+
+    Idempotent to call repeatedly: ``list_missing_catalog_metadata`` only
+    ever selects media items still missing ``attributes["catalog"]``, so a
+    second call while one backfill is already in flight — or after it has
+    finished — costs one query and enqueues nothing wasteful in the second
+    case, and simply resumes coverage in the first, same shape
+    ``trigger_embedding_backfill`` establishes.
+    """
+    JobQueue(session).enqueue(job_type=FETCH_CATALOG_METADATA, payload={"after_id": None})
+    return CatalogBackfillResponse(enqueued=True)
