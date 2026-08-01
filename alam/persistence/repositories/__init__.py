@@ -5,6 +5,7 @@ boundaries belong to the caller in ``services/``, so a single unit of work can
 span several repositories.
 """
 
+from alam.persistence.repositories.briefings import BriefingRepository
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.journey_summaries import JourneySummaryRepository
 from alam.persistence.repositories.llm_calls import LLMCallRepository
@@ -20,6 +21,7 @@ from alam.persistence.repositories.structure_units import StructureUnitRepositor
 from alam.persistence.repositories.users import UserRepository
 
 __all__ = [
+    "BriefingRepository",
     "CaptureRepository",
     "JourneySummaryRepository",
     "LLMCallRepository",

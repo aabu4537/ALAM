@@ -3,7 +3,11 @@ ADR-0014). No database."""
 
 from __future__ import annotations
 
-from alam.domain.synthesis_staleness import is_artifact_stale, is_recommendation_set_stale
+from alam.domain.synthesis_staleness import (
+    is_artifact_stale,
+    is_briefing_stale,
+    is_recommendation_set_stale,
+)
 
 
 class TestIsArtifactStale:
@@ -116,6 +120,64 @@ class TestIsRecommendationSetStale:
                 current_shelf_snapshot=frozenset({"book-1"}),
                 generated_fact_snapshot=frozenset({"fact-1"}),
                 current_fact_snapshot=frozenset({"fact-1"}),
+                artifact_prompt_version_id="v1",
+                current_prompt_version_id="v2",
+            )
+            is True
+        )
+
+
+class TestIsBriefingStale:
+    def test_not_stale_when_nothing_changed(self) -> None:
+        assert (
+            is_briefing_stale(
+                generated_fact_snapshot=frozenset({"fact-1"}),
+                current_fact_snapshot=frozenset({"fact-1"}),
+                generated_catalog_present=True,
+                current_catalog_present=True,
+                artifact_prompt_version_id="v1",
+                current_prompt_version_id="v1",
+            )
+            is False
+        )
+
+    def test_stale_when_the_active_fact_set_changed(self) -> None:
+        assert (
+            is_briefing_stale(
+                generated_fact_snapshot=frozenset({"fact-1"}),
+                current_fact_snapshot=frozenset({"fact-1", "fact-2"}),
+                generated_catalog_present=True,
+                current_catalog_present=True,
+                artifact_prompt_version_id="v1",
+                current_prompt_version_id="v1",
+            )
+            is True
+        )
+
+    def test_stale_when_catalog_data_arrives_after_generation(self) -> None:
+        """The backfill (ADR-0015) can populate a candidate's catalog entry
+        after a briefing was already generated without one — the next read
+        should regenerate to surface the teaser, not serve a
+        personalization-only row forever."""
+        assert (
+            is_briefing_stale(
+                generated_fact_snapshot=frozenset({"fact-1"}),
+                current_fact_snapshot=frozenset({"fact-1"}),
+                generated_catalog_present=False,
+                current_catalog_present=True,
+                artifact_prompt_version_id="v1",
+                current_prompt_version_id="v1",
+            )
+            is True
+        )
+
+    def test_stale_when_the_prompt_version_changed_even_with_no_other_changes(self) -> None:
+        assert (
+            is_briefing_stale(
+                generated_fact_snapshot=frozenset({"fact-1"}),
+                current_fact_snapshot=frozenset({"fact-1"}),
+                generated_catalog_present=True,
+                current_catalog_present=True,
                 artifact_prompt_version_id="v1",
                 current_prompt_version_id="v2",
             )

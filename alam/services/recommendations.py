@@ -39,6 +39,7 @@ from alam.ai.synthesis.recommendations import (
     RECOMMENDATION_RESPONSE_SCHEMA,
     parse_recommendation_response,
 )
+from alam.domain.catalog_metadata import catalog_entry, has_catalog_content
 from alam.domain.recommendation_groundedness import CitationCheck, find_ungrounded_citations
 from alam.domain.synthesis_staleness import is_recommendation_set_stale
 from alam.persistence.models.recommendation import Recommendation, RecommendationStatus
@@ -116,24 +117,8 @@ def _to_read_shelf(session: Session, *, user_id: uuid.UUID) -> Sequence[MediaIte
     return [item for item in items if item.attributes.get("exclusive_shelf") == "to-read"]
 
 
-def _catalog_entry(item: MediaItem) -> dict[str, Any] | None:
-    entry = item.attributes.get("catalog")
-    return entry if isinstance(entry, dict) else None
-
-
-def _has_catalog_content(item: MediaItem) -> bool:
-    """``attributes["catalog"]`` existing isn't enough — a definite
-    "checked, found nothing" result (``blurb=None``, ``subjects=[]``) has
-    nothing a ``"catalog"`` citation could actually reference (M6 session
-    3, ADR-0015)."""
-    entry = _catalog_entry(item)
-    if entry is None:
-        return False
-    return bool(entry.get("blurb")) or bool(entry.get("subjects"))
-
-
 def _candidate_book(item: MediaItem) -> CandidateBook:
-    entry = _catalog_entry(item)
+    entry = catalog_entry(item.attributes)
     return CandidateBook(
         media_item_id=str(item.id),
         title=item.title,
@@ -177,7 +162,9 @@ def _generate(
     session.commit()  # durable before the LLM call — see the module docstring
 
     memories = MemoryRepository(session).list_for_user(user_id)
-    catalog_media_item_ids = frozenset(str(item.id) for item in shelf if _has_catalog_content(item))
+    catalog_media_item_ids = frozenset(
+        str(item.id) for item in shelf if has_catalog_content(item.attributes)
+    )
 
     try:
         prompt = build_recommendations_prompt(
@@ -296,7 +283,7 @@ def _claim_text(
         return fact_by_id[citation.id].statement
     if citation.type == "memory":
         return memory_by_id[citation.id].content
-    entry = _catalog_entry(book) or {}
+    entry = catalog_entry(book.attributes) or {}
     blurb = entry.get("blurb")
     if blurb:
         return str(blurb)
