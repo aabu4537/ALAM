@@ -11,7 +11,7 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0, M1, and M2 complete, M3 not started.** Deployed and live at
+> **Status: M0 through M3 complete.** Deployed and live at
 > [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
 > yet (that's M7), but the API is real:
 >
@@ -80,7 +80,19 @@ not achievable and is not claimed here. The model has the book in its weights;
 no retrieval filter removes that. The requirement is restated as **a measured
 leakage rate under defense in depth** — data filter, prompt constraint, output
 classifier checked against the *excluded* set, and an adversarial eval suite
-that produces a number. The number goes in this README when it exists.
+that produces a number.
+
+**Measured leakage rate: 0.0**, over a starter adversarial set of 10
+hand-authored cases engineered to tempt a leak — near-duplicate phrasing, and
+in a few cases identical wording, straddling the ordinal boundary
+([`alam/eval/spoiler_eval.py`](alam/eval/spoiler_eval.py), enforced in CI).
+That number is expected and structural, not a lucky sample: Layer 1 is a SQL
+predicate (`WHERE structure_ordinal <= :current`), not a model's probabilistic
+judgment, so leakage at this layer is either always zero or a bug. Layers 2
+and 3 (prompt constraint, output classifier) don't exist yet — they need a
+synthesis step that doesn't ship until M6 — so this number covers Layer 1
+only, not the full defense-in-depth stack. It will be revisited, and likely
+get worse before it gets better, once Layer 3 is real.
 
 ---
 
@@ -231,7 +243,7 @@ a PWA in M7.
 | **M0** | Foundation — schema, job queue, provider fakes, deployed | ✅ done |
 | **M1** | Import and structure — Goodreads CSV, EPUB, chapter verification | ✅ done |
 | **M2** | Capture and voice — transcription, entity correction, extraction (PWA recording UI deferred to M7) | ✅ done |
-| **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ⬜ |
+| **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ✅ done |
 | **M4** | Profile — consolidation, confidence decay, supersede logic | ⬜ |
 | **M5** | Predictions — lifecycle, resolution windows, evidence linking | ⬜ |
 | **M6** | Synthesis — briefings, journey summaries, recommendations | ⬜ |
@@ -259,6 +271,7 @@ consequences, and the alternatives that were rejected.
 | [0005](docs/adr/0005-deployment-topology.md) | Deployment topology |
 | [0006](docs/adr/0006-ordinal-stability.md) | Ordinal stability and structure re-verification |
 | [0007](docs/adr/0007-serverless-worker-execution.md) | Serverless worker execution — `pg_cron`-drained queue, $0/month |
+| [0008](docs/adr/0008-embedding-storage.md) | Embedding storage — a side table, not a column, so models can coexist mid-migration |
 
 ---
 
