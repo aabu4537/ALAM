@@ -29,6 +29,9 @@ from alam.persistence.repositories.llm_calls import LLMCallRepository
 from alam.persistence.session import get_session_factory
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import Any
+
     from alam.ai.providers.llm import Completion, LLMProvider
 
 
@@ -61,6 +64,7 @@ class InstrumentedLLMProvider:
         prompt_version_id: str,
         max_tokens: int | None = None,
         temperature: float = 0.0,
+        response_schema: Mapping[str, Any] | None = None,
     ) -> Completion:
         call_site = _call_site()
         started = time.perf_counter()
@@ -69,6 +73,7 @@ class InstrumentedLLMProvider:
             prompt_version_id=prompt_version_id,
             max_tokens=max_tokens,
             temperature=temperature,
+            response_schema=response_schema,
         )
         latency_ms = (time.perf_counter() - started) * 1000
 

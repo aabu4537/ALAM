@@ -6,44 +6,52 @@ nothing else to point at it. Verified against the installed SDK's actual
 ``chat.completions.create`` signature and ``ChatCompletion`` response shape
 (``usage.prompt_tokens`` / ``usage.completion_tokens``, OpenAI's naming —
 different words than Anthropic's ``input_tokens`` / ``output_tokens`` for
-the same thing, mapped onto ``Completion`` either way) — not verified
-against a live Ollama server, since none exists in this environment.
+the same thing, mapped onto ``Completion`` either way).
 
-Fits the existing Protocol without changes.
+Two structured-output paths, not one, both empirically verified against a
+live Ollama server (curl, this session — a schema with ``$defs``/``$ref``
+round-trips correctly through Ollama's OpenAI-compat layer):
 
-JSON mode is requested only for the prompt versions instructed to use it
-(extraction, consolidation, prediction resolution) — decided from
-``prompt_version_id``, which every call already supplies, rather than a
-new parameter the Protocol doesn't have. The set is built from the prompt
-modules' own ``PROMPT_VERSION_ID`` constants so it can't silently drift out
-of sync with a prompt version bump.
+**``response_schema`` given (follow-up to M5.5a):** ``response_format={"type":
+"json_schema", "json_schema": {...}}`` — real grammar-constrained decoding,
+not just an instruction to the model. Extraction uses this path.
+
+**``response_schema`` absent, but ``prompt_version_id`` is one of
+``_JSON_MODE_PROMPT_VERSIONS``:** the older, weaker ``{"type":
+"json_object"}`` mode — guarantees valid JSON, not any particular shape.
+Consolidation and prediction resolution still use this path; not converted
+in this change. Built from the prompt modules' own ``PROMPT_VERSION_ID``
+constants so it can't silently drift out of sync with a version bump.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import openai
 
 from alam.ai.prompts.consolidation import PROMPT_VERSION_ID as _CONSOLIDATION_PROMPT_VERSION_ID
-from alam.ai.prompts.extraction import PROMPT_VERSION_ID as _EXTRACTION_PROMPT_VERSION_ID
 from alam.ai.prompts.prediction_resolution import (
     PROMPT_VERSION_ID as _PREDICTION_RESOLUTION_PROMPT_VERSION_ID,
 )
 from alam.ai.providers.llm import Completion
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 _DEFAULT_MAX_TOKENS = 4096
 
 _JSON_MODE_PROMPT_VERSIONS = frozenset(
     {
-        _EXTRACTION_PROMPT_VERSION_ID,
         _CONSOLIDATION_PROMPT_VERSION_ID,
         _PREDICTION_RESOLUTION_PROMPT_VERSION_ID,
     }
 )
-"""entity-correction is deliberately absent — it produces a corrected
-transcript, not JSON, and forcing JSON mode on it would break the one call
-site that wants plain text back."""
+"""Extraction is deliberately absent now — it passes response_schema and
+uses the stronger constrained-decoding path above instead. entity-correction
+is absent for the original reason: it produces a corrected transcript, not
+JSON, and forcing JSON mode on it would break the one call site that wants
+plain text back."""
 
 
 class OllamaLLM:
@@ -64,6 +72,7 @@ class OllamaLLM:
         prompt_version_id: str,
         max_tokens: int | None = None,
         temperature: float = 0.0,
+        response_schema: Mapping[str, Any] | None = None,
     ) -> Completion:
         # Built as a plain dict and passed via **kwargs, not a typed
         # ChatCompletionMessageParam list — mypy widens a literal dict's
@@ -71,7 +80,12 @@ class OllamaLLM:
         # rejects; going through `Any` here is simpler than importing and
         # constructing the exact TypedDict for one message.
         optional_args: dict[str, Any] = {}
-        if prompt_version_id in _JSON_MODE_PROMPT_VERSIONS:
+        if response_schema is not None:
+            optional_args["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "response", "schema": dict(response_schema)},
+            }
+        elif prompt_version_id in _JSON_MODE_PROMPT_VERSIONS:
             optional_args["response_format"] = {"type": "json_object"}
 
         response = self._client.chat.completions.create(

@@ -33,6 +33,10 @@ dependencies = [
     # rather than added quietly.
     "sentence-transformers>=5.6.1",
     "faster-whisper>=1.2.1",
+    # Validates a fake provider's canned response against response_schema
+    # (schema-constrained decoding, follow-up to M5.5a) — a fake must not
+    # be able to return a shape no real, schema-constrained provider could.
+    "jsonschema>=4.26.0",
 ]
 
 [dependency-groups]
@@ -44,6 +48,7 @@ dev = [
     "httpx2>=2.0",
     "ruff>=0.8",
     "mypy>=1.14",
+    "types-jsonschema>=4.26.0.20260518",
 ]
 
 [build-system]
