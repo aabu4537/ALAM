@@ -102,6 +102,20 @@ synthesis step that doesn't ship until M6 — so this number covers Layer 1
 only, not the full defense-in-depth stack. It will be revisited, and likely
 get worse before it gets better, once Layer 3 is real.
 
+Layer 1's coverage isn't limited to `retrieve_memories`. Every reader-facing
+route that returns media-derived content — memories, predictions, chapters —
+resolves its position through the same `ReaderContext`, and that coverage is
+enforced, not just remembered:
+[`tests/test_reader_context_coverage.py`](tests/test_reader_context_coverage.py)
+enumerates every registered route and requires each one to either use it or
+carry an explicit, reasoned exemption — 16 today (internal job endpoints,
+write-then-echo actions, the one-time verification read, and the cross-book
+preference view, which structurally can't have one). Two routes were missing
+this before the test existed — `/structure`, open since M1, and
+`/predictions`, open since M5 — both found by audit and closed the same day
+([ADR-0002](docs/adr/0002-spoiler-containment.md) amendment,
+[ADR-0012](docs/adr/0012-prediction-visibility-by-ordinal.md)).
+
 ---
 
 ## Memory architecture
@@ -228,14 +242,15 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /health` | Liveness — env, version. Doesn't touch the database (ADR-0005). |
 | `POST /imports/goodreads/preview` / `/commit` | CSV in, diff out, then apply. Dedupe key: ISBN13 → ISBN10 → normalized title+author. |
 | `POST /books/epub/preview` / `/commit` | EPUB in, a proposed chapter structure out (from spine order), then persisted unverified. |
-| `GET` / `PUT /books/{id}/structure` | Read the proposal; submit corrections. One list-replace expresses merge, split, relabel, and exclude (ADR-0004). |
+| `GET` / `PUT /books/{id}/structure` | The pre-reading verification read (full unit list, including raw `first_lines` prose) and the human's corrections — one list-replace expresses merge, split, relabel, and exclude (ADR-0004). `GET` 409s once the structure is verified. |
+| `GET /books/{id}/chapters` | The reading-time read: id, ordinal, and label up to the active session's current ordinal. `first_lines` is never in this response — not filtered out, structurally absent (ADR-0002 amendment). |
 | `POST /books/{id}/captures` | Raw audio in. Resumes or starts the book's active reading session at the given chapter, persists the audio, enqueues transcription. |
 | `GET /books/{id}/captures/{capture_id}` | A capture's pipeline status and, once each stage runs, its raw/corrected transcript. |
 | `GET /books/{id}/reading-sessions/active` | The book's current session — chapter, ordinal, normalized progress (ADR-0004). |
 | `POST /books/{id}/reading-sessions/{id}/end` | Marks a session `completed` or `abandoned` — a DNF is a preference signal, never deleted. |
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
 | `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
-| `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it (M5, ADR-0009). |
+| `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it, masked back to pending until the resolution window closes relative to the reader's own position (M5, ADR-0009; ADR-0012). |
 | `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
@@ -356,6 +371,11 @@ build yet.
 Stated up front rather than discovered:
 
 - **Spoiler containment is probabilistic, not guaranteed.** See above.
+- **`GET /preferences/taste-drift` cannot be covered by Layer 1.** Preference
+  facts are cross-book generalizations produced by M4 consolidation and carry
+  no ordinal to filter against. The only mitigation is a consolidation-prompt
+  instruction to emit general statements rather than restatements of a single
+  memory — a prompt-level guardrail, not a SQL-enforced guarantee.
 - **The profile is only as good as extraction**, since every memory flows
   through one funnel. This is why the eval harness is M3 and not M7.
 - **Ordinal data is load-bearing and human-verified.** EPUB spine order is a
