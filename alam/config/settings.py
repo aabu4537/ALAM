@@ -105,6 +105,15 @@ class Settings(BaseSettings):
     (domain.preference_decay.reinforce) is what moves confidence toward 1 as
     more observations accumulate."""
 
+    # --- Predictions (M5) ---
+    prediction_resolution_window: int = Field(default=10, ge=1)
+    """Ordinals of progress a prediction waits before its evidence window is
+    scanned (docs/milestones.md, M5). Captured onto each ``predictions`` row
+    at creation time, not re-read at resolution time, so a later change to
+    this default doesn't retroactively move an already-pending prediction's
+    goalposts.
+    """
+
     # --- Retrieval (M3) ---
     retrieval_candidate_limit: int = Field(default=20, ge=1)
     """Rows fetched per branch (vector, full-text) before RRF fusion narrows

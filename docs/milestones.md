@@ -110,11 +110,12 @@ without one.
 
 ## M5 — Predictions
 
-- Lifecycle: created → pending → resolved / unresolved
+- Lifecycle: created → pending → confirmed / refuted / unresolvable
 - Resolution triggered when progress crosses `made_at_ordinal + N`, scanning only
-  chunks in that window — so predictions resolve during the journey, not only at
-  the end
-- Evidence chunk linking
+  memories in that window — so predictions resolve during the journey, not only
+  at the end (ADR-0009: memories, not `content_chunks`, which still doesn't
+  exist)
+- Evidence memory linking
 - `unresolvable` is a real outcome. Vague predictions exist; forcing every one
   into confirmed/refuted manufactures false precision.
 

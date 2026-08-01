@@ -15,6 +15,8 @@ from alam.persistence.models.media_structure_unit import (
 )
 from alam.persistence.models.memory import Memory, MemoryType
 from alam.persistence.models.memory_embedding import MemoryEmbedding
+from alam.persistence.models.prediction import Prediction, PredictionStatus
+from alam.persistence.models.prediction_evidence import PredictionEvidence
 from alam.persistence.models.preference_fact import PreferenceFact
 from alam.persistence.models.preference_fact_evidence import PreferenceFactEvidence
 from alam.persistence.models.reading_session import ReadingSession, ReadingSessionStatus
@@ -32,6 +34,9 @@ __all__ = [
     "Memory",
     "MemoryEmbedding",
     "MemoryType",
+    "Prediction",
+    "PredictionEvidence",
+    "PredictionStatus",
     "PreferenceFact",
     "PreferenceFactEvidence",
     "ReadingSession",

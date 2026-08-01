@@ -9,6 +9,7 @@ from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
 from alam.persistence.repositories.memories import MemoryRepository
 from alam.persistence.repositories.memory_embeddings import MemoryEmbeddingRepository
+from alam.persistence.repositories.predictions import PredictionRepository
 from alam.persistence.repositories.preference_facts import PreferenceFactRepository
 from alam.persistence.repositories.reading_sessions import ReadingSessionRepository
 from alam.persistence.repositories.retrieval import RetrievalRepository
@@ -20,6 +21,7 @@ __all__ = [
     "MediaItemRepository",
     "MemoryEmbeddingRepository",
     "MemoryRepository",
+    "PredictionRepository",
     "PreferenceFactRepository",
     "ReadingSessionRepository",
     "RetrievalRepository",
