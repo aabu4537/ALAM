@@ -101,7 +101,7 @@ without one.
 
 ## M4 — Profile
 
-- Nightly consolidation job
+- Weekly consolidation job
 - Confidence decay and reinforcement
 - Supersede logic for contradictions
 - Taste drift view
