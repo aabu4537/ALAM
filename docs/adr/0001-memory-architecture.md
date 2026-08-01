@@ -29,9 +29,12 @@ hatch, so extraction accuracy is measurable. One capture fans out to many
 memories. Rows carry a vector embedding, a tsvector, and a denormalized
 `structure_ordinal`.
 
-**L3 — Semantic profile.** The `preference_facts` table. Derived by a nightly
-consolidation job. Low-cardinality, human-readable, each fact carrying a
-confidence score and pointers to the episodic memories that produced it.
+**L3 — Semantic profile.** The `preference_facts` table. Derived by a weekly
+consolidation job — a single-user personal system generates at most a handful
+of reflections a day, so nightly buys no fresher a profile, just seven times
+the job runs and seven times the LLM spend. Low-cardinality, human-readable,
+each fact carrying a confidence score and pointers to the episodic memories
+that produced it.
 
 **L3 has no embedding column and is not retrieved by vector search.** It is small
 enough to load wholesale into every prompt.
