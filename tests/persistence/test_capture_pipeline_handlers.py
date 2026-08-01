@@ -14,6 +14,7 @@ from alam.persistence.repositories import (
     CaptureRepository,
     MediaItemRepository,
     MemoryRepository,
+    PredictionRepository,
     ReadingSessionRepository,
     StructureUnitRepository,
     UserRepository,
@@ -295,3 +296,67 @@ class TestExtractMemories:
     def test_unknown_capture_id_is_an_ordinary_failure(self, session: Session) -> None:
         with pytest.raises(CapturePipelineError):
             extract_memories(session, {"capture_id": str(uuid.uuid4())})
+
+    def test_a_prediction_memory_creates_a_pending_prediction(
+        self, session: Session, capture: Capture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        CaptureRepository(session).mark_transcribed(
+            capture, raw_transcript="raw", transcript_model="fake-stt-v1"
+        )
+        CaptureRepository(session).mark_corrected(
+            capture, corrected_transcript="I think Jessica is hiding something."
+        )
+        response = (
+            '[{"memory_type": "prediction", "content": "Jessica is hiding something."},'
+            ' {"memory_type": "opinion", "content": "The pacing drags here."}]'
+        )
+        monkeypatch.setattr(
+            "alam.services.capture_pipeline.get_llm_provider", lambda: FakeLLM(responses=[response])
+        )
+
+        extract_memories(session, {"capture_id": str(capture.id)})
+
+        memories = MemoryRepository(session).list_for_capture(capture.id)
+        prediction_memory = next(m for m in memories if m.content == "Jessica is hiding something.")
+        [prediction] = PredictionRepository(session).list_for_media_item(capture.media_item_id)
+        assert prediction.source_memory_id == prediction_memory.id
+        assert prediction.made_at_ordinal == capture.structure_ordinal
+        assert prediction.status.value == "pending"
+
+    def test_the_resolution_window_comes_from_settings(
+        self, session: Session, capture: Capture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from alam.config.settings import get_settings
+
+        get_settings.cache_clear()
+        monkeypatch.setenv("ALAM_PREDICTION_RESOLUTION_WINDOW", "3")
+        CaptureRepository(session).mark_transcribed(
+            capture, raw_transcript="raw", transcript_model="fake-stt-v1"
+        )
+        CaptureRepository(session).mark_corrected(capture, corrected_transcript="x")
+        response = '[{"memory_type": "prediction", "content": "x"}]'
+        monkeypatch.setattr(
+            "alam.services.capture_pipeline.get_llm_provider", lambda: FakeLLM(responses=[response])
+        )
+
+        extract_memories(session, {"capture_id": str(capture.id)})
+
+        [prediction] = PredictionRepository(session).list_for_media_item(capture.media_item_id)
+        assert prediction.resolution_window == 3
+        get_settings.cache_clear()
+
+    def test_a_non_prediction_memory_creates_no_prediction(
+        self, session: Session, capture: Capture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        CaptureRepository(session).mark_transcribed(
+            capture, raw_transcript="raw", transcript_model="fake-stt-v1"
+        )
+        CaptureRepository(session).mark_corrected(capture, corrected_transcript="x")
+        response = '[{"memory_type": "opinion", "content": "x"}]'
+        monkeypatch.setattr(
+            "alam.services.capture_pipeline.get_llm_provider", lambda: FakeLLM(responses=[response])
+        )
+
+        extract_memories(session, {"capture_id": str(capture.id)})
+
+        assert PredictionRepository(session).list_for_media_item(capture.media_item_id) == []

@@ -22,12 +22,15 @@ from alam.ai.prompts.extraction import (
 )
 from alam.ai.prompts.extraction import build_extraction_prompt
 from alam.ai.providers import get_llm_provider, get_stt_provider
+from alam.config.settings import get_settings
 from alam.domain.entity_bias import book_entity_list
 from alam.jobs.job_types import CORRECT_TRANSCRIPT, EXTRACT_MEMORIES
 from alam.jobs.queue import JobQueue
+from alam.persistence.models.memory import MemoryType
 from alam.persistence.repositories.captures import CaptureRepository
 from alam.persistence.repositories.media_items import MediaItemRepository
 from alam.persistence.repositories.memories import MemoryRepository
+from alam.persistence.repositories.predictions import PredictionRepository
 from alam.persistence.repositories.structure_units import StructureUnitRepository
 
 if TYPE_CHECKING:
@@ -112,7 +115,7 @@ def extract_memories(session: Session, payload: dict[str, Any]) -> None:
     except ExtractionError as exc:
         raise CapturePipelineError(f"capture {capture.id}: {exc}") from exc
 
-    MemoryRepository(session).create_many(
+    memories = MemoryRepository(session).create_many(
         capture_id=capture.id,
         media_item_id=capture.media_item_id,
         structure_unit_id=capture.structure_unit_id,
@@ -120,5 +123,16 @@ def extract_memories(session: Session, payload: dict[str, Any]) -> None:
         prompt_version_id=EXTRACTION_PROMPT_VERSION_ID,
         extracted=extracted,
     )
+
+    resolution_window = get_settings().prediction_resolution_window
+    predictions = PredictionRepository(session)
+    for memory in memories:
+        if memory.memory_type == MemoryType.PREDICTION:
+            predictions.create(
+                source_memory_id=memory.id,
+                media_item_id=memory.media_item_id,
+                made_at_ordinal=memory.structure_ordinal,
+                resolution_window=resolution_window,
+            )
 
     CaptureRepository(session).mark_extracted(capture)
