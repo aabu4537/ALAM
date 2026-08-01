@@ -97,6 +97,16 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
         "of a candidate's content could occupy, not by ReaderContext "
         "(ADR-0014)"
     ),
+    ("GET", "/books/{media_item_id}/briefing"): (
+        "M6 session 4 briefings are pre-book by definition — the route "
+        "refuses once an active ReadingSession exists, so there is never a "
+        "reading position to construct a ReaderContext from. Spoiler risk "
+        "is mitigated the same structural way recommendations are "
+        "(ADR-0014/ADR-0015): the response schema has no field an "
+        "LLM-authored characterization of the candidate's content could "
+        "occupy — the teaser is always ALAM-composed from the candidate's "
+        "own cached catalog entry, never LLM-cited"
+    ),
 }
 
 

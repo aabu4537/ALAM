@@ -192,11 +192,20 @@ M6 session 2: the Layer 3 classifier itself turned out not to generalize to
 every artifact type — recommendations have no excluded-content set to check
 a draft against, since they're library-wide with no ordinal and no
 `CatalogProvider` yet. ADR-0014 covers what recommendations use instead and
-why; Layer 3 is expected to apply again for briefings, session 4, once
-`CatalogProvider` gives them real book content an ordinal filter can
-exclude from.) A `blocked_leaked` draft is never lost — it's on the row for
-audit — but is also never one response-model field away from an accidental
-leak, since the service raises instead of ever handing the row back to the
+why; Layer 3 was expected to apply again for briefings, session 4, once
+`CatalogProvider` gave them real book content an ordinal filter could
+exclude from.
+
+Amendment, M6 session 4: it didn't, for the same underlying reason session
+2 found — there is still no ordinal (a briefing is for a book with no
+active reading session, i.e. no reading position at all) and no fixed,
+enumerable "excluded content" list a classifier could check a draft
+against. Briefings apply the same structural fix ADR-0014 validated
+rather than inventing a new one; full design and rationale in ADR-0016.)
+
+A `blocked_leaked` draft is never lost — it's on the row for audit — but
+is also never one response-model field away from an accidental leak,
+since the service raises instead of ever handing the row back to the
 router in that status.
 
 **Negative.** Layer 3 adds a second LLM call and its own latency to every

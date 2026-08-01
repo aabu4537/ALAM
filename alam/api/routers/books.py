@@ -22,6 +22,14 @@ that marks the item verified.
 The EPUB body is raw bytes, not a multipart upload — same tradeoff as the
 Goodreads import router: avoids adding `python-multipart` for a single
 caller pre-M7.
+
+``GET .../journey-summary`` and ``GET .../briefing`` are the same kind of
+split: a journey summary is for a book with a reading position to
+summarize (``ReaderContext``-scoped); a briefing (M6 session 4) is for a
+book with none yet — it refuses once an active ``ReadingSession`` exists,
+pointing at ``.../journey-summary`` instead, the same "pre-book" boundary
+``ai/prompts/briefing.py`` and ``services/briefing.py`` describe in more
+depth.
 """
 
 from __future__ import annotations
@@ -33,12 +41,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from alam.api.dependencies import reader_context_dependency
+from alam.domain.catalog_metadata import catalog_entry
 from alam.domain.structure_review import DesiredUnit, StructurePlanError
 from alam.media.books.epub import EpubParseError
 from alam.persistence.repositories.media_items import MediaItemRepository
+from alam.persistence.repositories.reading_sessions import ReadingSessionRepository
 from alam.persistence.repositories.structure_units import StructureUnitRepository
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
+from alam.services.briefing import (
+    BriefingBlockedError,
+    BriefingGenerationError,
+    get_or_generate_briefing,
+)
+from alam.services.briefing import UnknownMediaItemError as UnknownBriefingMediaItemError
 from alam.services.epub_ingestion import UnknownMediaItemError, commit_epub, preview_epub
 from alam.services.journey_summary import (
     JourneySummaryBlockedError,
@@ -129,6 +145,25 @@ class JourneySummaryResponse(BaseModel):
     generated_at_ordinal: int
     model: str
     prompt_version_id: str
+
+
+class BriefingClaimResponse(BaseModel):
+    text: str
+    """Copied verbatim from the cited ``preference_fact``/``memory``'s own
+    stored text — never written by the LLM (same discipline ADR-0014
+    established for recommendations)."""
+    cites_type: str
+    cites_id: str
+
+
+class BriefingResponse(BaseModel):
+    id: str
+    media_item_id: str
+    title: str
+    author: str | None
+    blurb: str | None
+    subjects: list[str]
+    claims: list[BriefingClaimResponse]
 
 
 def _preview_response(parsed: ParsedEpub) -> EpubPreviewResponse:
@@ -332,4 +367,59 @@ def get_journey_summary(
         generated_at_ordinal=summary.generated_at_ordinal,
         model=summary.model,
         prompt_version_id=summary.prompt_version_id,
+    )
+
+
+@router.get("/{media_item_id}/briefing", response_model=BriefingResponse)
+def get_briefing(
+    media_item_id: uuid.UUID, session: Session = Depends(session_scope)
+) -> BriefingResponse:
+    """A spoiler-safe pre-book orientation for a book the reader has not
+    started yet (M6 session 4) — no ``ReaderContext``, since there is no
+    reading position to construct one from. Refuses once the book has an
+    active ``ReadingSession``: ``.../journey-summary`` is the equivalent
+    for a book already in progress, same "two routes, not a mode switch"
+    split ``.../structure`` vs ``.../chapters`` already established.
+
+    The teaser (``blurb``/``subjects``) is read live from the item's own
+    cached catalog entry (ADR-0015) — never persisted a second time on the
+    briefing row. ``claims`` are the reader's own facts/memories about
+    *other* books the LLM selected as relevant, with text ALAM composed
+    from the cited record, never from the LLM (same discipline ADR-0014
+    established for recommendations — no Layer 3 leak check runs here for
+    the identical reason: the schema has no field an LLM-authored
+    characterization of this book's content could occupy)."""
+    owner = UserRepository(session).get_owner()
+    item = MediaItemRepository(session).get(media_item_id) if owner else None
+    if item is None or owner is None or item.user_id != owner.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
+
+    active_session = ReadingSessionRepository(session).get_active_for_media_item(media_item_id)
+    if active_session is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="book is already being read; see GET .../journey-summary instead",
+        )
+
+    try:
+        briefing = get_or_generate_briefing(session, media_item_id=media_item_id)
+    except UnknownBriefingMediaItemError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BriefingBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except BriefingGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    assert briefing.claims is not None  # only COMPLETE rows are ever returned here
+    entry = catalog_entry(item.attributes) or {}
+    return BriefingResponse(
+        id=str(briefing.id),
+        media_item_id=str(item.id),
+        title=item.title,
+        author=item.attributes.get("author"),
+        blurb=entry.get("blurb"),
+        subjects=entry.get("subjects", []),
+        claims=[BriefingClaimResponse(**claim) for claim in briefing.claims],
     )

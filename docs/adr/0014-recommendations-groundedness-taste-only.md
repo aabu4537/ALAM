@@ -119,8 +119,9 @@ ALAM has no legitimate source for a to-read book's plot, genre, or themes
 until session 3 builds one, so recommendations in session 2 make no claims
 about that at all. **`CatalogProvider` (session 3) is what unblocks any
 claim about a candidate's actual content** — the same dependency briefings
-(session 4) have, and for the same reason: neither artifact type can
-honestly say anything about a book's content without a real source for it.
+(session 4, ADR-0016) have, and for the same reason: neither artifact type
+can honestly say anything about a book's content without a real source
+for it.
 
 ## Consequences
 

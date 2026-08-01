@@ -6,6 +6,7 @@ migrations.
 """
 
 from alam.persistence.base import Base
+from alam.persistence.models.briefing import Briefing, BriefingStatus
 from alam.persistence.models.capture import Capture, CaptureStatus
 from alam.persistence.models.job import Job, JobStatus
 from alam.persistence.models.journey_summary import JourneySummary, JourneySummaryStatus
@@ -27,6 +28,8 @@ from alam.persistence.models.user import User
 
 __all__ = [
     "Base",
+    "Briefing",
+    "BriefingStatus",
     "Capture",
     "CaptureStatus",
     "Job",

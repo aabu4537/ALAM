@@ -104,9 +104,11 @@ text changed).
 **Not touched:** journey summaries, Layer 3, `is_artifact_stale` — this
 session's catalog data has no bearing on a book the reader is already
 inside. Briefings (session 4) are the other real consumer of
-`CatalogProvider`, left for its own session — they also need Layer 3
-back, since a briefing has real excluded content to check a draft against
-now that a legitimate source of book content exists.
+`CatalogProvider`, left for its own session. (Correction, session 4:
+Layer 3 did not end up returning for briefings after all — see ADR-0016.
+A briefing has no reading position at all to check a leak-check-shaped
+"excluded content" list against; it applies ADR-0014's structural fix
+instead, unchanged.)
 
 ## Consequences
 

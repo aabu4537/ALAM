@@ -146,16 +146,30 @@ against the published API shape, same caveat
 [`voyage_embeddings.py`](alam/ai/providers/real/voyage_embeddings.py)
 carries for its own real client.
 
+`GET /books/{id}/briefing` (M6 session 4, the last M6 deliverable) is a
+spoiler-safe orientation for a book the reader hasn't started yet — it
+refuses once an active reading session exists, pointing at
+`.../journey-summary` instead. Same structural discipline as
+recommendations, not Layer 3: the LLM never writes about the candidate's
+content at all, only selects which of the reader's own
+`preference_facts`/`memories` (from *other* books) connect to it; the
+teaser shown alongside is the candidate's own cached catalog
+blurb/subjects, composed by ALAM, never the model. **Measured
+`briefing_groundedness`: 0.0 ungrounded**
+([`alam/eval/briefing_eval.py`](alam/eval/briefing_eval.py), enforced in
+CI), same deterministic shape as `recommendation_groundedness`. Full
+design in [ADR-0016](docs/adr/0016-briefings-scope-and-groundedness.md).
+
 Layer 1's coverage isn't limited to `retrieve_memories`. Every reader-facing
 route that returns media-derived content — memories, predictions, chapters —
 resolves its position through the same `ReaderContext`, and that coverage is
 enforced, not just remembered:
 [`tests/test_reader_context_coverage.py`](tests/test_reader_context_coverage.py)
 enumerates every registered route and requires each one to either use it or
-carry an explicit, reasoned exemption — 16 today (internal job endpoints,
-write-then-echo actions, the one-time verification read, and the cross-book
-preference view, which structurally can't have one). Two routes were missing
-this before the test existed — `/structure`, open since M1, and
+carry an explicit, reasoned exemption — 19 today (internal job endpoints,
+write-then-echo actions, the one-time verification read, and the
+library-wide/pre-book views, which structurally can't have one). Two routes
+were missing this before the test existed — `/structure`, open since M1, and
 `/predictions`, open since M5 — both found by audit and closed the same day
 ([ADR-0002](docs/adr/0002-spoiler-containment.md) amendment,
 [ADR-0012](docs/adr/0012-prediction-visibility-by-ordinal.md)).
@@ -297,6 +311,7 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it, masked back to pending until the resolution window closes relative to the reader's own position (M5, ADR-0009; ADR-0012). |
 | `GET /books/{id}/journey-summary` | A short narrative of the reader's journey through this book so far, generated on demand from their own memories and predictions and cached until stale. Checked against everything the ordinal filter excluded before it's ever returned (M6 session 1, ADR-0002 Layers 2–3, ADR-0013). A generation the check flags is never served — 503, not the leaked draft. |
 | `GET /recommendations` | The reader's own to-read shelf, filtered to what best matches their recorded taste — every claim cites a specific `preference_fact`/`memory` id, or (once a candidate is catalog-backfilled) its own real `catalog` entry, displayed text copied from that record, never written by the model (M6 sessions 2–3, ADR-0014, ADR-0015). A citation that doesn't check out blocks the whole set — 503, never a partial response. |
+| `GET /books/{id}/briefing` | A spoiler-safe orientation for a book the reader hasn't started — refuses (409) once an active reading session exists. The candidate's own cached catalog blurb/subjects as a teaser, plus citations to the reader's own facts/memories from other books; the model never writes about the candidate's content itself (M6 session 4, ADR-0016). |
 | `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate`, `/internal/catalog/backfill` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
@@ -317,7 +332,7 @@ a PWA in M7.
 | **M3** | Memory and retrieval — hybrid search, spoiler filter, **eval harness** | ✅ done |
 | **M4** | Profile — weekly consolidation, confidence decay, supersede logic, taste drift view | ✅ done |
 | **M5** | Predictions — lifecycle, progress-triggered resolution windows, evidence memory linking | ✅ done |
-| **M6** | Synthesis — briefings, journey summaries, recommendations | 🟨 in progress (journey summaries, recommendations, `CatalogProvider` done; briefings next) |
+| **M6** | Synthesis — briefings, journey summaries, recommendations | ✅ done |
 | **M7** | Polish — frontend, token/cost accounting, README with real numbers | ⬜ |
 
 M3 is the milestone that makes this a portfolio project rather than a personal

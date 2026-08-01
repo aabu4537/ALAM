@@ -107,6 +107,18 @@ class RecommendationGroundednessReport:
 
 
 @dataclass(frozen=True)
+class BriefingGroundednessReport:
+    ungrounded_rate: float
+    """M6 session 4's headline number, parallel to
+    ``RecommendationGroundednessReport.ungrounded_rate`` — same reasoning:
+    briefings don't run Layer 3 either (no field an LLM-authored
+    characterization of the candidate's content could occupy), so
+    citation groundedness is what a briefing generation is unsafe or safe
+    against, not a leak verdict."""
+    results: tuple[GroundednessCaseResult, ...]
+
+
+@dataclass(frozen=True)
 class ExtractionCase:
     label: str
     transcript: str
