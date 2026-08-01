@@ -39,6 +39,9 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
     ("POST", "/internal/preferences/consolidate"): (
         "internal, secret-gated — enqueues jobs, returns no content"
     ),
+    ("POST", "/internal/catalog/backfill"): (
+        "internal, secret-gated — enqueues jobs, returns no content (M6 session 3)"
+    ),
     ("POST", "/imports/goodreads/preview"): (
         "library metadata diff (ratings, shelves) — not ordinal-scoped book content"
     ),

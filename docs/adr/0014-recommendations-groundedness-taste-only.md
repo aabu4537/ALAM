@@ -138,6 +138,15 @@ not a synthesis connecting that to the candidate's actual content. That's
 the taste-only limitation above, not a bug; it lifts once `CatalogProvider`
 exists.
 
+**Amendment, M6 session 3 (ADR-0015): this lifted, per-candidate, not all
+at once.** `CatalogProvider` now exists; a candidate the backfill has
+reached can be cited with a real, catalog-sourced claim about its own
+content (`type="catalog"`), using the identical "no field for unsourced
+content" structural discipline this ADR established — the citation schema
+widened rather than gaining an exception. A candidate not yet backfilled
+is still exactly taste-only, as described above; nothing here changed for
+it.
+
 ## Alternatives considered
 
 **Reuse Layer 3 unchanged, as the session 2 sketch originally assumed.**

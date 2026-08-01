@@ -59,5 +59,54 @@ class MediaItemRepository:
         self._session.flush()
         return item
 
+    def list_missing_catalog_metadata(
+        self, *, after_id: uuid.UUID | None, limit: int
+    ) -> Sequence[MediaItem]:
+        """The catalog backfill's batch query (M6 session 3, ADR-0015): every
+        item with no ``attributes["catalog"]`` key yet, ordered by id —
+        UUIDv7 is time-ordered, so ``id`` doubles as a stable, resumable
+        cursor, same idiom ``MemoryRepository.list_needing_embedding`` uses.
+        Library-wide, not shelf-scoped — this data is useful for
+        recommendations (to-read candidates) and, later, briefings (any
+        book), so nothing here filters by ``exclusive_shelf``."""
+        stmt = (
+            select(MediaItem)
+            .where(~MediaItem.attributes.has_key("catalog"))
+            .order_by(MediaItem.id)
+            .limit(limit)
+        )
+        if after_id is not None:
+            stmt = stmt.where(MediaItem.id > after_id)
+        return self._session.scalars(stmt).all()
+
+    def set_catalog_metadata(
+        self,
+        item: MediaItem,
+        *,
+        blurb: str | None,
+        subjects: list[str],
+        series: str | None,
+        fetched_at: dt.datetime,
+    ) -> MediaItem:
+        """Merges into the existing ``attributes`` blob rather than
+        replacing it — same idiom ``services/goodreads_import.py`` uses for
+        a re-import, so this never erases columns another pipeline wrote.
+        A provider miss (``CatalogProvider.fetch_metadata`` returned
+        ``None``) is recorded the same way, with every field ``None``/empty
+        — a real "checked, found nothing" result, not "never checked," so
+        the backfill's cursor query above does not select this row again.
+        """
+        item.attributes = {
+            **item.attributes,
+            "catalog": {
+                "blurb": blurb,
+                "subjects": subjects,
+                "series": series,
+                "fetched_at": fetched_at.isoformat(),
+            },
+        }
+        self._session.flush()
+        return item
+
     def delete(self, item: MediaItem) -> None:
         self._session.delete(item)

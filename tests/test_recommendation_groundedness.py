@@ -1,5 +1,6 @@
 """Pure citation-existence matching for recommendations (M6 session 2,
-ADR-0014). No database — id sets are handed in directly."""
+ADR-0014; widened M6 session 3, ADR-0015). No database — id sets are handed
+in directly."""
 
 from __future__ import annotations
 
@@ -70,3 +71,40 @@ class TestFindUngroundedCitations:
         )
 
         assert result == [bad]
+
+    def test_a_catalog_citation_for_a_backfilled_candidate_is_grounded(self) -> None:
+        citation = CitationCheck(media_item_id="book-1", cites_type="catalog", cites_id="book-1")
+
+        result = find_ungrounded_citations(
+            [citation],
+            valid_fact_ids=frozenset(),
+            valid_memory_ids=frozenset(),
+            valid_catalog_media_item_ids=frozenset({"book-1"}),
+        )
+
+        assert result == []
+
+    def test_a_catalog_citation_for_a_never_backfilled_candidate_is_ungrounded(self) -> None:
+        citation = CitationCheck(media_item_id="book-1", cites_type="catalog", cites_id="book-1")
+
+        result = find_ungrounded_citations(
+            [citation],
+            valid_fact_ids=frozenset(),
+            valid_memory_ids=frozenset(),
+            valid_catalog_media_item_ids=frozenset(),
+        )
+
+        assert result == [citation]
+
+    def test_the_catalog_valid_set_defaults_to_empty(self) -> None:
+        """Session 2 callers that only ever cite facts/memories shouldn't
+        need to pass a third, always-empty set — but any catalog citation
+        that does show up without one must still fail, not pass by
+        accident."""
+        citation = CitationCheck(media_item_id="book-1", cites_type="catalog", cites_id="book-1")
+
+        result = find_ungrounded_citations(
+            [citation], valid_fact_ids=frozenset(), valid_memory_ids=frozenset()
+        )
+
+        assert result == [citation]

@@ -1,7 +1,8 @@
 """get_or_generate_recommendations: the persisted-artifact lifecycle (M6
-session 2, ADR-0014) — pending row written before generation, shelf/fact
-snapshot staleness, and the schema-driven groundedness check that blocks a
-set rather than ever returning an ungrounded citation.
+session 2, ADR-0014; widened M6 session 3, ADR-0015) — pending row written
+before generation, shelf/fact snapshot staleness, and the schema-driven
+groundedness check that blocks a set rather than ever returning an
+ungrounded citation.
 """
 
 from __future__ import annotations
@@ -51,6 +52,40 @@ def _to_read_book(session: Session, owner: User, *, title: str = "Case Book") ->
         user_id=owner.id,
         title=title,
         attributes={"exclusive_shelf": "to-read", "author": "Some Author"},
+    )
+
+
+def _to_read_book_with_catalog(
+    session: Session,
+    owner: User,
+    *,
+    title: str = "Case Book",
+    blurb: str | None = "A desert planet and the boy who would rule it.",
+    subjects: list[str] | None = None,
+) -> MediaItem:
+    return MediaItemRepository(session).create(
+        user_id=owner.id,
+        title=title,
+        attributes={
+            "exclusive_shelf": "to-read",
+            "author": "Some Author",
+            "catalog": {
+                "blurb": blurb,
+                "subjects": ["Science fiction"] if subjects is None else subjects,
+                "series": None,
+                "fetched_at": dt.datetime.now(dt.UTC).isoformat(),
+            },
+        },
+    )
+
+
+def _cites_catalog_response(*, media_item_id: uuid.UUID) -> str:
+    return (
+        '{"recommendations": [{"media_item_id": "'
+        + str(media_item_id)
+        + '", "cites": [{"type": "catalog", "id": "'
+        + str(media_item_id)
+        + '"}]}]}'
     )
 
 
@@ -112,7 +147,7 @@ class TestGetOrGenerateRecommendations:
 
         assert result.status is RecommendationStatus.COMPLETE
         assert result.model == fake_llm.model
-        assert result.prompt_version_id == "recommendations-v1"
+        assert result.prompt_version_id == "recommendations-v2"
         assert result.candidates == [
             {
                 "media_item_id": str(book.id),
@@ -234,7 +269,7 @@ class TestGetOrGenerateRecommendations:
         first = get_or_generate_recommendations(session, user_id=owner.id)
         monkeypatch.setattr(
             "alam.services.recommendations.RECOMMENDATIONS_PROMPT_VERSION_ID",
-            "recommendations-v2",
+            "recommendations-v3",
         )
         second = get_or_generate_recommendations(session, user_id=owner.id)
 
@@ -333,3 +368,86 @@ class TestGetOrGenerateRecommendations:
         assert row is not None
         assert row.status is RecommendationStatus.FAILED
         assert row.error is not None
+
+    def test_a_catalog_citation_resolves_to_the_stored_blurb(
+        self, session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        book = _to_read_book_with_catalog(session, owner, title="Dune")
+        fake_llm = FakeLLM(responses=[_cites_catalog_response(media_item_id=book.id)])
+        monkeypatch.setattr("alam.services.recommendations.get_llm_provider", lambda: fake_llm)
+
+        result = get_or_generate_recommendations(session, user_id=owner.id)
+
+        assert result.status is RecommendationStatus.COMPLETE
+        assert result.candidates == [
+            {
+                "media_item_id": str(book.id),
+                "title": "Dune",
+                "claims": [
+                    {
+                        "text": "A desert planet and the boy who would rule it.",
+                        "cites_type": "catalog",
+                        "cites_id": str(book.id),
+                    }
+                ],
+            }
+        ]
+
+    def test_a_catalog_citation_falls_back_to_subjects_when_there_is_no_blurb(
+        self, session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        book = _to_read_book_with_catalog(
+            session, owner, blurb=None, subjects=["Science fiction", "Politics"]
+        )
+        fake_llm = FakeLLM(responses=[_cites_catalog_response(media_item_id=book.id)])
+        monkeypatch.setattr("alam.services.recommendations.get_llm_provider", lambda: fake_llm)
+
+        result = get_or_generate_recommendations(session, user_id=owner.id)
+
+        assert result.status is RecommendationStatus.COMPLETE
+        assert result.candidates is not None
+        assert result.candidates[0]["claims"][0]["text"] == "Subjects: Science fiction, Politics."
+
+    def test_a_catalog_citation_for_a_candidate_never_backfilled_is_ungrounded(
+        self, session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        book = _to_read_book(session, owner)  # no attributes["catalog"] at all
+        fake_llm = FakeLLM(responses=[_cites_catalog_response(media_item_id=book.id)])
+        monkeypatch.setattr("alam.services.recommendations.get_llm_provider", lambda: fake_llm)
+
+        with pytest.raises(RecommendationsBlockedError):
+            get_or_generate_recommendations(session, user_id=owner.id)
+
+        row = RecommendationRepository(session).get_latest_for_user(owner.id)
+        assert row is not None
+        assert row.status is RecommendationStatus.BLOCKED_UNGROUNDED
+
+    def test_a_catalog_citation_for_a_found_nothing_result_is_ungrounded(
+        self, session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A definite "checked, found nothing" catalog entry (blurb=None,
+        subjects=[]) has nothing a catalog citation could reference —
+        distinct from never having been backfilled, but still ungrounded."""
+        book = _to_read_book_with_catalog(session, owner, blurb=None, subjects=[])
+        fake_llm = FakeLLM(responses=[_cites_catalog_response(media_item_id=book.id)])
+        monkeypatch.setattr("alam.services.recommendations.get_llm_provider", lambda: fake_llm)
+
+        with pytest.raises(RecommendationsBlockedError):
+            get_or_generate_recommendations(session, user_id=owner.id)
+
+    def test_a_candidate_with_no_catalog_data_still_works_taste_only(
+        self, session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Session 2's behavior is unchanged for a candidate the backfill
+        hasn't reached yet — taste-only citations still work exactly as
+        they did before this session."""
+        book = _to_read_book(session, owner)
+        fact = _fact(session, owner)
+        fake_llm = FakeLLM(responses=[_cites_fact_response(media_item_id=book.id, fact_id=fact.id)])
+        monkeypatch.setattr("alam.services.recommendations.get_llm_provider", lambda: fake_llm)
+
+        result = get_or_generate_recommendations(session, user_id=owner.id)
+
+        assert result.status is RecommendationStatus.COMPLETE
+        assert result.candidates is not None
+        assert result.candidates[0]["claims"][0]["cites_type"] == "preference_fact"

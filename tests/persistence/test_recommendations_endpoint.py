@@ -48,6 +48,23 @@ def _fact(session: Session, owner: User) -> PreferenceFact:
     )
 
 
+def _to_read_book_with_catalog(session: Session, owner: User, *, title: str = "Dune") -> MediaItem:
+    return MediaItemRepository(session).create(
+        user_id=owner.id,
+        title=title,
+        attributes={
+            "exclusive_shelf": "to-read",
+            "author": "Frank Herbert",
+            "catalog": {
+                "blurb": "A desert planet and the boy who would rule it.",
+                "subjects": ["Science fiction"],
+                "series": None,
+                "fetched_at": dt.datetime.now(dt.UTC).isoformat(),
+            },
+        },
+    )
+
+
 def test_generates_and_returns_recommendations(
     session: Session, client: TestClient, owner: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -120,3 +137,34 @@ def test_an_empty_to_read_shelf_returns_an_empty_list_with_no_llm_call(
     assert response.status_code == 200
     assert response.json()["recommendations"] == []
     assert len(fake_llm.calls) == 0
+
+
+def test_a_catalog_citation_produces_a_blurb_backed_claim(
+    session: Session, client: TestClient, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M6 session 3, ADR-0015: a candidate CatalogProvider has already
+    fetched can be recommended with a claim grounded in its own real,
+    catalog-sourced description — not the reader's taste alone."""
+    book = _to_read_book_with_catalog(session, owner)
+    canned = (
+        '{"recommendations": [{"media_item_id": "'
+        + str(book.id)
+        + '", "cites": [{"type": "catalog", "id": "'
+        + str(book.id)
+        + '"}]}]}'
+    )
+    monkeypatch.setattr(
+        "alam.services.recommendations.get_llm_provider", lambda: FakeLLM(responses=[canned])
+    )
+
+    response = client.get("/recommendations")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recommendations"][0]["claims"] == [
+        {
+            "text": "A desert planet and the boy who would rule it.",
+            "cites_type": "catalog",
+            "cites_id": str(book.id),
+        }
+    ]
