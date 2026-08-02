@@ -83,7 +83,7 @@ limitation, just a safe one.
 
 ---
 
-## M3 — Memory and retrieval *(current)*
+## M3 — Memory and retrieval *(complete)*
 
 - Embeddings with `embedding_model` / `embedding_version` recorded
 - Hybrid retrieval: pgvector cosine + Postgres full-text, fused with reciprocal
@@ -99,7 +99,7 @@ without one.
 
 ---
 
-## M4 — Profile
+## M4 — Profile *(complete)*
 
 - Weekly consolidation job
 - Confidence decay and reinforcement
@@ -108,7 +108,7 @@ without one.
 
 ---
 
-## M5 — Predictions
+## M5 — Predictions *(complete)*
 
 - Lifecycle: created → pending → confirmed / refuted / unresolvable
 - Resolution triggered when progress crosses `made_at_ordinal + N`, scanning only
@@ -121,7 +121,7 @@ without one.
 
 ---
 
-## M6 — Synthesis
+## M6 — Synthesis *(complete)*
 
 - Spoiler-safe pre-book briefings
 - Reading journey summaries
@@ -143,7 +143,7 @@ without one.
 
 ---
 
-## M7 — Polish
+## M7 — Polish *(complete)*
 
 - Frontend
 - Observability: per-request token accounting, cost view

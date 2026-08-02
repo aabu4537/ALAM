@@ -23,10 +23,11 @@ spoiler-safe insights, prediction resolutions, and recommendations.
 
 ## Current milestone
 
-**M7 — Polish.** M0 through M6 are complete. `docs/milestones.md`'s M7
-definition of done has three items: frontend, observability (per-request
-token accounting + a cost view), and a README rewrite with real eval
-numbers and an honest limitations section.
+**M7 — Polish, complete.** M0 through M7 are all done — M7 is the last
+milestone `docs/milestones.md` names. Its definition of done had three
+items: frontend, observability (per-request token accounting + a cost
+view), and a README rewrite with real eval numbers and an honest
+limitations section. All three are closed as of session 4 below.
 
 **Session 1 (2026-08-01) built the observability item, LLM-only** — a
 scope decision made directly with the user, not a default:
@@ -63,9 +64,22 @@ so no ambiguity exists at all, not by reordering rewrites. No public
 demo-mode UI was built — the earlier scope decision was owner-scoped +
 auth, not demo-first, and that stands.
 
-The README rewrite depends on running the eval harnesses against a real
-(not fake) provider, which is itself unstarted — the last remaining M7
-item.
+**Session 4 (2026-08-02) closed the last M7 item — the README rewrite.**
+The real-provider eval numbers this item was thought to be blocked on
+turned out to already exist: M5.5a (before M7 even started) had already
+run `extraction_eval`/`retrieval_eval`/`spoiler_eval` against real local
+providers (Ollama `llama3.2:3b`, `bge-small-en-v1.5` embeddings —
+`docs/eval/baseline-local-providers.md`) and those numbers were already
+in the README's Limitations section. What was actually stale was the
+status banner and the M7 milestone-table row, both still reading "in
+progress" after sessions 1-3 had already merged. Fixed as a text-only
+pass — no new eval run, on the user's explicit call: the one number the
+README itself flags as not-yet-real (`synthesis_leakage_rate`, Layer 3's
+leak-check, which currently only exercises the fake LLM's canned
+verdict) was left as a known, honestly-labeled gap rather than run
+against Ollama this session. `docs/milestones.md`'s per-milestone status
+markers (M3 wrongly said "current"; M4-M7 had none) were corrected to
+match while in there.
 
 Nothing outside the M7 definition of done in `docs/milestones.md` should be
 implemented. If a task seems to require work this doc doesn't name, stop

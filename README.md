@@ -11,11 +11,11 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 through M6 complete; M7 in progress.** Deployed and live at
-> [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — a Next.js frontend
-> now sits in front of the owner-scoped API (M7 session 3); this status
-> banner and the milestone table below still want the full real-numbers
-> rewrite that's M7's last item. The API itself has been real all along:
+> **Status: M0 through M7 complete.** Deployed and live at
+> [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — a password-gated
+> Next.js frontend (M7 session 3, ADR-0018) sits in front of the
+> owner-scoped API (M7 session 2, ADR-0017). The API itself has been real
+> all along:
 >
 > ```bash
 > curl https://alam-zeta.vercel.app/health
@@ -53,8 +53,9 @@ flowchart LR
     style I fill:#8957e5,color:#fff,stroke:none
 ```
 
-**A through G, and I are real** as of M5 — a raw-audio API, not a recording UI
-(that's M7); H (synthesis) is still ahead. The pipeline is **deterministic**
+**A through I are all real.** A shipped as a raw-audio API at M2, with a
+recording UI added on top at M7; H (synthesis) shipped at M6. The pipeline
+is **deterministic**
 — input → processing → retrieval → synthesis → memory update. There is no
 autonomous agent in V1. Agents are reconsidered at M6, when multiple knowledge
 sources make retrieval orchestration a real problem rather than a decoration
@@ -346,7 +347,7 @@ take, and still unconsumed by any page.
 | **M4** | Profile — weekly consolidation, confidence decay, supersede logic, taste drift view | ✅ done |
 | **M5** | Predictions — lifecycle, progress-triggered resolution windows, evidence memory linking | ✅ done |
 | **M6** | Synthesis — briefings, journey summaries, recommendations | ✅ done |
-| **M7** | Polish — frontend, token/cost accounting, README with real numbers | ⬜ |
+| **M7** | Polish — frontend, token/cost accounting, README with real numbers | ✅ done |
 
 M3 is the milestone that makes this a portfolio project rather than a personal
 tool. Stopping after M3 with a working eval harness beats stopping after M6
