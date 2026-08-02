@@ -6,5 +6,15 @@
       "memory": 1024
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/auth/:path*", "destination": "/api/index" },
+    { "source": "/books", "destination": "/api/index" },
+    { "source": "/books/:path*", "destination": "/api/index" },
+    { "source": "/demo/:path*", "destination": "/api/index" },
+    { "source": "/internal/:path*", "destination": "/api/index" },
+    { "source": "/preferences/:path*", "destination": "/api/index" },
+    { "source": "/recommendations", "destination": "/api/index" },
+    { "source": "/imports/:path*", "destination": "/api/index" }
+  ]
 }

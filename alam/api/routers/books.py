@@ -166,6 +166,57 @@ class BriefingResponse(BaseModel):
     claims: list[BriefingClaimResponse]
 
 
+class BookSummaryResponse(BaseModel):
+    id: str
+    title: str
+    author: str | None
+    my_rating: int | None
+    exclusive_shelf: str | None
+    structure_verified: bool
+    has_active_reading_session: bool
+    chapter_count: int
+
+
+class LibraryResponse(BaseModel):
+    books: list[BookSummaryResponse]
+
+
+@router.get("", response_model=LibraryResponse)
+def list_library(session: Session = Depends(session_scope)) -> LibraryResponse:
+    """The owner's whole library, verified or not, any shelf — the frontend's
+    home page routes each card to the right sub-page from ``structure_verified``
+    and ``has_active_reading_session`` alone (unverified -> .../verify; verified
+    with no active session -> the briefing; active session -> the reading
+    dashboard). No owner yet renders an empty list rather than 404, same
+    precedent as ``GET /preferences/taste-drift`` and ``GET /recommendations``:
+    there is no specific resource being asked for and missing."""
+    owner = UserRepository(session).get_owner()
+    if owner is None:
+        return LibraryResponse(books=[])
+
+    items = MediaItemRepository(session)
+    units = StructureUnitRepository(session)
+    reading_sessions = ReadingSessionRepository(session)
+
+    return LibraryResponse(
+        books=[
+            BookSummaryResponse(
+                id=str(item.id),
+                title=item.title,
+                author=item.attributes.get("author"),
+                my_rating=item.attributes.get("my_rating"),
+                exclusive_shelf=item.attributes.get("exclusive_shelf"),
+                structure_verified=item.structure_is_verified,
+                has_active_reading_session=(
+                    reading_sessions.get_active_for_media_item(item.id) is not None
+                ),
+                chapter_count=len(units.list_for_media_item(item.id)),
+            )
+            for item in items.list_for_user(owner.id)
+        ]
+    )
+
+
 def _preview_response(parsed: ParsedEpub) -> EpubPreviewResponse:
     return EpubPreviewResponse(
         title=parsed.metadata.title,
@@ -273,6 +324,46 @@ def get_chapters(
             VisibleStructureUnitResponse(id=str(u.id), ordinal=u.ordinal, label=u.label)
             for u in units
         ],
+    )
+
+
+@router.get("/{media_item_id}/chapters/first", response_model=VisibleStructureUnitResponse)
+def get_first_chapter(
+    media_item_id: uuid.UUID, session: Session = Depends(session_scope)
+) -> VisibleStructureUnitResponse:
+    """Where to start reading a verified book with no history yet (M7
+    session 3): ``.../chapters`` 404s until a reading session exists
+    (``reader_context_dependency``), and a session can only start once the
+    first capture names a real ``structure_unit_id`` (ADR-0004: progress is
+    captured as part of the recording act) — so this is the one piece of
+    structural information a not-yet-started book needs before that first
+    capture can be submitted. Same discipline as ``.../chapters``: no
+    ``first_lines`` field exists on this response model to leak. Refuses
+    once an active ``ReadingSession`` exists — ``.../chapters`` is the
+    equivalent from that point on, same split ``.../structure`` vs
+    ``.../chapters`` already established."""
+    owner = UserRepository(session).get_owner()
+    item = MediaItemRepository(session).get(media_item_id) if owner else None
+    if item is None or owner is None or item.user_id != owner.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book not found")
+    if not item.structure_is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="structure is not verified yet"
+        )
+
+    active_session = ReadingSessionRepository(session).get_active_for_media_item(media_item_id)
+    if active_session is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="book already has an active reading session; see GET .../chapters instead",
+        )
+
+    first_unit = StructureUnitRepository(session).get_by_ordinal(media_item_id, 1)
+    if first_unit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="book has no chapters")
+
+    return VisibleStructureUnitResponse(
+        id=str(first_unit.id), ordinal=first_unit.ordinal, label=first_unit.label
     )
 
 

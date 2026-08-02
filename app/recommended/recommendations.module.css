@@ -1,0 +1,67 @@
+.heading {
+  font-size: 2.2rem;
+  margin-bottom: var(--space-1);
+}
+
+.generated {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: var(--space-4);
+}
+
+.empty {
+  color: var(--ink-faint);
+  max-width: 36rem;
+}
+
+.grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.card {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.cardTitle {
+  display: inline-block;
+  font-size: 1.15rem;
+  margin-bottom: var(--space-2);
+  text-decoration: none;
+}
+
+.cardTitle:hover {
+  color: var(--seal);
+}
+
+.claims {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.claim {
+  border-left: 2px solid var(--brass);
+  padding-left: var(--space-2);
+}
+
+.claimText {
+  font-style: italic;
+  font-size: 0.92rem;
+}
+
+.claimSource {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}

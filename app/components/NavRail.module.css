@@ -1,0 +1,75 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  width: 15rem;
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-3);
+  border-right: 1px solid var(--rule);
+  background: var(--paper-raised);
+  min-height: 100vh;
+}
+
+.wordmarkOnly {
+  padding: var(--space-4) var(--space-3);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--seal);
+  text-decoration: none;
+  margin-bottom: var(--space-4);
+  display: inline-block;
+}
+
+.links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.link {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.link:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.linkActive {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--paper);
+  box-shadow: inset 2px 0 0 var(--seal);
+}
+
+.logout {
+  margin-top: auto;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.logout:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.logout:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

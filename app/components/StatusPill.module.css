@@ -1,0 +1,26 @@
+.pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.neutral {
+  color: var(--brass);
+  border-color: var(--brass);
+  background: transparent;
+}
+
+.active {
+  color: var(--paper-raised);
+  background: var(--seal);
+}
+
+.quiet {
+  color: var(--ink-faint);
+  border-color: var(--rule);
+}

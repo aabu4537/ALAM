@@ -38,3 +38,10 @@ htmlcov/
 
 # Vercel
 .vercel
+
+# Next.js / frontend
+/node_modules
+/.next/
+/out/
+*.tsbuildinfo
+next-env.d.ts
