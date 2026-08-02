@@ -1,0 +1,105 @@
+.heading {
+  font-size: 2.2rem;
+  margin-bottom: var(--space-3);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-4);
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tabActive {
+  color: var(--ink);
+  border-bottom-color: var(--seal);
+}
+
+.panel {
+  max-width: 40rem;
+}
+
+.dropzone {
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.fileInput {
+  margin-top: var(--space-2);
+}
+
+.action {
+  margin-top: var(--space-3);
+  background: var(--seal);
+  color: var(--paper-raised);
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--seal-soft);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.secondaryAction {
+  composes: action;
+  background: var(--brass);
+  margin-left: var(--space-2);
+}
+
+.error {
+  color: var(--seal);
+  margin-top: var(--space-2);
+}
+
+.diff {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-3);
+}
+
+.diffSection {
+  margin-bottom: var(--space-3);
+}
+
+.diffSectionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brass);
+  margin-bottom: var(--space-1);
+}
+
+.diffRow {
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+}
+
+.success {
+  margin-top: var(--space-3);
+  color: var(--ink-soft);
+}

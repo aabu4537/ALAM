@@ -38,9 +38,34 @@ table. A known, documented gap — see that module's docstring — not a
 silent one; embeddings/STT instrumentation is its own future session if
 complete spend accounting is wanted.
 
-Frontend has not been started — the user asked to be told before design
-work on it begins. The README rewrite depends on running the eval
-harnesses against a real (not fake) provider, which is itself unstarted.
+**Session 2 (2026-08-01) added owner authentication (ADR-0017)** — found to
+be a prerequisite while researching what the frontend would talk to
+(everything owner-scoped was reachable by anyone who found the URL).
+Shared-password login, a stdlib signed `SameSite=Lax` cookie, router-level
+`require_owner_session` gating, enforced structurally by
+`tests/test_owner_session_coverage.py`.
+
+**Session 3 (2026-08-02) built the frontend item — Next.js, one Vercel
+project** (ADR-0018), against the owner-scoped API session 2 made safe to
+point a browser at. Two small backend additions came out of building
+real pages against the real API rather than guessing at its shape:
+`GET /books` (no route listed the owner's library at all) and
+`GET /books/{id}/chapters/first` (no route told a verified,
+not-yet-started book where to begin — `/chapters` 404s until a reading
+session exists, and starting one needs a real `structure_unit_id`). A
+real routing bug was found and fixed during manual verification, not
+guessed at: the frontend's first-cut page paths (`/books/[id]`,
+`/preferences`, `/recommendations`) collided with backend router
+prefixes and were silently swallowed by `vercel.json`'s/`next.config.ts`'s
+rewrites before Next's own dynamic routes ever saw the request — fixed by
+renaming the frontend pages (`/library/[id]`, `/profile`, `/recommended`)
+so no ambiguity exists at all, not by reordering rewrites. No public
+demo-mode UI was built — the earlier scope decision was owner-scoped +
+auth, not demo-first, and that stands.
+
+The README rewrite depends on running the eval harnesses against a real
+(not fake) provider, which is itself unstarted — the last remaining M7
+item.
 
 Nothing outside the M7 definition of done in `docs/milestones.md` should be
 implemented. If a task seems to require work this doc doesn't name, stop
@@ -104,8 +129,14 @@ whole system is in this repo; its presence is not permission to implement it.
 - `media/base.py` / `MediaProvider` Protocol (deferred for M6 —
   `docs/milestones/M6-open-questions.md` question 1)
 - Memory deletion or edit path (deferred for M6 — same doc, question 5)
-- Frontend beyond a health page — M7's own item, not started yet; wait for
-  an explicit go-ahead before beginning design
+- A public demo-mode frontend surface — M7 session 3 built the
+  owner-scoped Next.js frontend only, per the earlier owner-scoped-vs-demo
+  scope decision; `GET /demo/books` stays backend-only, unconsumed by any
+  page, until that's revisited on purpose
+- A drag-and-drop structure editor, or a full offline/background-sync PWA
+  (service worker, install prompts) — the structure verify page is a
+  plain editable table, and the capture recorder's IndexedDB queue only
+  retries a failed upload, deliberately short of either
 - Any media type other than books
 - Caching layers, rate limiting, read replicas, sharding
 
@@ -134,6 +165,13 @@ alam/
 
 Dependency direction is strictly inward: `api` → `services` → `domain`.
 `domain` imports nothing from the layers above it.
+
+The Next.js frontend (`app/`, `lib/`, `proxy.ts`, `next.config.ts`) lives
+at the repo root alongside this package, not nested under it — one Vercel
+project serves both (ADR-0018). Its own page paths (`/library`, `/profile`,
+`/recommended`, ...) are deliberately distinct from every router prefix
+above; see ADR-0018 before adding either a new API router or a new
+top-level frontend route.
 
 ---
 

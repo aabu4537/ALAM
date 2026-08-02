@@ -11,9 +11,11 @@ V1 covers **books only**. This is a single-user personal system that doubles as 
 portfolio artifact — not a SaaS product, and not built for multi-tenancy or
 horizontal scale.
 
-> **Status: M0 through M5 complete.** Deployed and live at
-> [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — there is no frontend
-> yet (that's M7), but the API is real:
+> **Status: M0 through M6 complete; M7 in progress.** Deployed and live at
+> [alam-zeta.vercel.app](https://alam-zeta.vercel.app) — a Next.js frontend
+> now sits in front of the owner-scoped API (M7 session 3); this status
+> banner and the milestone table below still want the full real-numbers
+> rewrite that's M7's last item. The API itself has been real all along:
 >
 > ```bash
 > curl https://alam-zeta.vercel.app/health
@@ -263,7 +265,7 @@ standing worker, no paid tier, $0/month.
 ```mermaid
 flowchart TB
     subgraph V ["Vercel — Fluid Compute"]
-        API["FastAPI web service<br/><i>PWA joins here at M7</i>"]
+        API["FastAPI web service<br/><i>+ Next.js frontend, same project (M7 session 3)</i>"]
         DRAIN["POST /internal/jobs/drain<br/><i>bounded: max_jobs, budget_seconds</i>"]
     end
     subgraph S ["Supabase — free tier"]
@@ -298,10 +300,12 @@ Everything below is a real endpoint on the live URL, not a plan.
 | Endpoint | What it does |
 |---|---|
 | `GET /health` | Liveness — env, version. Doesn't touch the database (ADR-0005). |
+| `GET /books` | The owner's whole library — every book, verified or not, any shelf. The frontend's home page; no `ReaderContext`, same reasoning as `/recommendations` (M7 session 3). |
 | `POST /imports/goodreads/preview` / `/commit` | CSV in, diff out, then apply. Dedupe key: ISBN13 → ISBN10 → normalized title+author. |
 | `POST /books/epub/preview` / `/commit` | EPUB in, a proposed chapter structure out (from spine order), then persisted unverified. |
 | `GET` / `PUT /books/{id}/structure` | The pre-reading verification read (full unit list, including raw `first_lines` prose) and the human's corrections — one list-replace expresses merge, split, relabel, and exclude (ADR-0004). `GET` 409s once the structure is verified. |
 | `GET /books/{id}/chapters` | The reading-time read: id, ordinal, and label up to the active session's current ordinal. `first_lines` is never in this response — not filtered out, structurally absent (ADR-0002 amendment). |
+| `GET /books/{id}/chapters/first` | Where to start reading a verified book with no session yet — `/chapters` 404s until one exists, and starting one needs a real `structure_unit_id`. Refuses once a session exists (M7 session 3). |
 | `POST /books/{id}/captures` | Raw audio in. Resumes or starts the book's active reading session at the given chapter, persists the audio, enqueues transcription. |
 | `GET /books/{id}/captures/{capture_id}` | A capture's pipeline status and, once each stage runs, its raw/corrected transcript. |
 | `GET /books/{id}/reading-sessions/active` | The book's current session — chapter, ordinal, normalized progress (ADR-0004). |
@@ -321,9 +325,13 @@ Submitting a capture enqueues three chained jobs — transcribe, correct, extrac
 Every route above except `/health`, `/demo/books`, `/auth/*`, and
 `/internal/*` now requires a valid owner session — `require_owner_session`
 is applied router-wide, enforced structurally by
-`tests/test_owner_session_coverage.py` (M7 session 2, ADR-0017). No
-frontend calls these yet; they're driven by `curl`/tests today and will
-get a PWA in M7, now that there's an auth gate worth pointing one at.
+`tests/test_owner_session_coverage.py` (M7 session 2, ADR-0017). A Next.js
+frontend now drives them (M7 session 3, ADR-0018) — one Vercel project,
+`vercel.json` rewrites splitting the same domain between Next's own pages
+and `api/index.py`, `tests/test_vercel_rewrites_cover_every_route.py`
+keeping that split honest. `GET /demo/books` is still backend-only —
+built for the demo-mode option the owner-scoped-with-auth decision didn't
+take, and still unconsumed by any page.
 
 ---
 

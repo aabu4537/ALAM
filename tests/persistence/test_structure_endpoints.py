@@ -139,3 +139,61 @@ class TestReadingRead:
         response = client.get(f"/books/{book.id}/chapters")
 
         assert response.status_code == 200
+
+
+class TestFirstChapter:
+    """``GET .../chapters/first`` (M7 session 3): the one piece of structural
+    information a verified, not-yet-started book needs before the first
+    capture — which is what starts its reading session — can be submitted."""
+
+    def test_returns_ordinal_one_for_a_verified_book_with_no_session(
+        self, session: Session, client: TestClient, book: MediaItem
+    ) -> None:
+        StructureUnitRepository(session).create(media_item_id=book.id, ordinal=1, label="Ch. 1")
+        StructureUnitRepository(session).create(media_item_id=book.id, ordinal=2, label="Ch. 2")
+        MediaItemRepository(session).mark_structure_verified(book)
+
+        response = client.get(f"/books/{book.id}/chapters/first")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ordinal"] == 1
+        assert body["label"] == "Ch. 1"
+        assert "first_lines" not in body
+
+    def test_refuses_while_unverified(
+        self, session: Session, client: TestClient, book: MediaItem
+    ) -> None:
+        StructureUnitRepository(session).create(media_item_id=book.id, ordinal=1, label="Ch. 1")
+
+        response = client.get(f"/books/{book.id}/chapters/first")
+
+        assert response.status_code == 409
+
+    def test_refuses_once_a_reading_session_exists(
+        self, session: Session, client: TestClient, book: MediaItem
+    ) -> None:
+        unit = StructureUnitRepository(session).create(
+            media_item_id=book.id, ordinal=1, label="Ch. 1"
+        )
+        MediaItemRepository(session).mark_structure_verified(book)
+        ReadingSessionRepository(session).get_or_create_active(
+            book.id, structure_unit_id=unit.id, ordinal=1, progress=0.0
+        )
+
+        response = client.get(f"/books/{book.id}/chapters/first")
+
+        assert response.status_code == 409
+        assert "chapters" in response.json()["detail"]
+
+    def test_a_book_belonging_to_someone_else_is_a_404(
+        self, session: Session, client: TestClient
+    ) -> None:
+        UserRepository(session).create(display_name="Owner", is_demo=False)
+        someone_else = UserRepository(session).create(display_name="Someone Else", is_demo=False)
+        book = MediaItemRepository(session).create(user_id=someone_else.id, title="Not Yours")
+        MediaItemRepository(session).mark_structure_verified(book)
+
+        response = client.get(f"/books/{book.id}/chapters/first")
+
+        assert response.status_code == 404

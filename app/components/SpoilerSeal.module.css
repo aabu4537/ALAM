@@ -1,0 +1,18 @@
+.seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--seal);
+  border: 1px solid var(--seal);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem 0.15rem 0.35rem;
+}
+
+.wax {
+  color: var(--seal);
+  font-size: 0.75rem;
+}

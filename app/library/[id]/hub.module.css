@@ -1,0 +1,220 @@
+.heading {
+  font-size: 2.2rem;
+  margin-bottom: var(--space-1);
+}
+
+.progress {
+  color: var(--ink-faint);
+  margin-bottom: var(--space-4);
+}
+
+.author {
+  color: var(--ink-faint);
+  margin-bottom: var(--space-2);
+}
+
+.blurb {
+  max-width: 42rem;
+  margin-bottom: var(--space-2);
+}
+
+.subjects {
+  list-style: none;
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.subjects li {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brass);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+/* Asymmetric two-column "book spread": a main page column plus a narrower
+   marginalia rail, separated by a torn-paper diagonal rather than a
+   hairline. */
+.spread {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+  position: relative;
+}
+
+.spread::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(66.6% - 1px);
+  width: 2px;
+  background: repeating-linear-gradient(
+    170deg,
+    var(--rule) 0 6px,
+    transparent 6px 11px
+  );
+}
+
+@media (max-width: 900px) {
+  .spread {
+    grid-template-columns: 1fr;
+  }
+  .spread::before {
+    display: none;
+  }
+}
+
+.mainColumn,
+.marginalia {
+  min-width: 0;
+}
+
+.section {
+  margin-top: var(--space-4);
+}
+
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brass);
+  margin-bottom: var(--space-2);
+}
+
+.narrative {
+  max-width: 42rem;
+}
+
+.chapterList,
+.predictionList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.chapterList li {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.predictionList li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+}
+
+.predictionStatus {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  align-self: flex-start;
+}
+
+.claimList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 42rem;
+}
+
+.claimList li {
+  padding: var(--space-2);
+  background: var(--paper-raised);
+  border-left: 2px solid var(--brass);
+  font-style: italic;
+}
+
+.recorder {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  max-width: 42rem;
+}
+
+.recorderLabel {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-2);
+}
+
+.recordButton {
+  background: var(--seal);
+  color: var(--paper-raised);
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.recordButton:hover:not(:disabled) {
+  background: var(--seal-soft);
+}
+
+.recordButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recordButtonActive {
+  composes: recordButton;
+  background: var(--seal-soft);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.recorderNote {
+  margin-top: var(--space-2);
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+.endSession {
+  margin-top: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.endSession button {
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.endSession button:hover:not(:disabled) {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+}
+
+.error {
+  color: var(--seal);
+}

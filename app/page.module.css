@@ -1,0 +1,57 @@
+.heading {
+  font-size: 2.2rem;
+  margin-bottom: var(--space-4);
+}
+
+.empty {
+  color: var(--ink-faint);
+}
+
+.emptyLink {
+  color: var(--seal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-3);
+}
+
+.card {
+  display: block;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  text-decoration: none;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-page);
+  transform: translateY(-2px);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.chapterCount {
+  color: var(--ink-faint);
+}
+
+.cardTitle {
+  font-size: 1.25rem;
+  margin-bottom: 0.2rem;
+}
+
+.cardAuthor {
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}

@@ -1,0 +1,138 @@
+/* Design tokens — "the commonplace book". A private, voice-driven reading
+   journal, not a SaaS dashboard: warm paper, deep ink, one accent used
+   sparingly. */
+
+:root {
+  --paper: #f4ecdc;
+  --paper-raised: #faf4e8;
+  --ink: #23241f;
+  --ink-soft: #4a4a3f;
+  --ink-faint: #8a8672;
+  --rule: #d9cfb2;
+  --seal: #9a2b1f;
+  --seal-soft: #c4523f;
+  --brass: #9c7a37;
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --space-1: 0.4rem;
+  --space-2: 0.8rem;
+  --space-3: 1.4rem;
+  --space-4: 2.4rem;
+  --space-5: 4rem;
+
+  --radius: 2px;
+  --shadow-page: 0 1px 2px rgba(35, 36, 31, 0.08), 0 8px 24px rgba(35, 36, 31, 0.06);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper: #241f18;
+  --paper-raised: #2d2721;
+  --ink: #ece3d2;
+  --ink-soft: #c9bfa9;
+  --ink-faint: #8c8168;
+  --rule: #4a3f2f;
+  --seal: #d0563f;
+  --seal-soft: #e07a5f;
+  --brass: #c9a662;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #241f18;
+    --paper-raised: #2d2721;
+    --ink: #ece3d2;
+    --ink-soft: #c9bfa9;
+    --ink-faint: #8c8168;
+    --rule: #4a3f2f;
+    --seal: #d0563f;
+    --seal-soft: #e07a5f;
+    --brass: #c9a662;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.ordinal,
+.stamp {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+/* One page-settle reveal on load — staggered via animation-delay set inline
+   per element (see PageSettle component), not a library. */
+@keyframes page-settle {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-settle {
+  animation: page-settle 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-settle {
+    animation: none;
+  }
+}

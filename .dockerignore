@@ -11,3 +11,16 @@ __pycache__/
 *.zip
 docs/
 .github/
+
+# Frontend (Vercel-only, ADR-0005/ADR-0018) — this image is API + worker only
+node_modules/
+.next/
+app/
+lib/
+public/
+proxy.ts
+next.config.ts
+package.json
+package-lock.json
+tsconfig.json
+eslint.config.mjs

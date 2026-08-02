@@ -56,6 +56,18 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
     ("POST", "/imports/goodreads/commit"): (
         "applies the same metadata diff — not ordinal-scoped book content"
     ),
+    ("GET", "/books/{media_item_id}/chapters/first"): (
+        "pre-book by definition, same as .../briefing — refuses once an "
+        "active ReadingSession exists, so there is never a reading position "
+        "to construct a ReaderContext from. No first_lines field on the "
+        "response model to leak (M7 session 3)"
+    ),
+    ("GET", "/books"): (
+        "the owner's whole library, library-wide by design — not scoped to any "
+        "single media_item_id or ordinal, so there is no ReaderContext to "
+        "construct, same reasoning as /recommendations and /preferences/taste-drift. "
+        "No book content beyond title/author/rating/shelf (M7 session 3)"
+    ),
     ("POST", "/books/epub/preview"): (
         "parses an uploaded EPUB in memory, no database access at all"
     ),
