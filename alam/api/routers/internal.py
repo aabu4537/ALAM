@@ -18,6 +18,14 @@ caller could see or spam beyond what the queue itself already bounds.
 The consolidation trigger is the same shape again, same secret: Supabase
 Cron calls it weekly (ADR-0001, M4) — the schedule entry itself lives in
 Supabase, not in this repo, same as the drain schedule (ADR-0007).
+
+The costs endpoint (M7 session 1) also reuses the drain secret, for a
+different reason again: it's read-only, so it isn't a billing or spam
+vector, but it's operational spend data on a public URL — the same "not
+meant for public consumption" reasoning already applied to writes here,
+applied to a read. LLM spend only — see `services/cost_view.py` and
+`domain/llm_cost.py` for the scope decision (embeddings/STT aren't
+instrumented yet).
 """
 
 from __future__ import annotations
@@ -37,6 +45,7 @@ from alam.jobs.job_types import (
 from alam.jobs.queue import JobQueue
 from alam.jobs.runner import drain
 from alam.persistence.session import get_session_factory, session_scope
+from alam.services.cost_view import get_cost_view
 from alam.services.demo_persona import seed_demo_persona
 
 if TYPE_CHECKING:
@@ -216,3 +225,100 @@ def trigger_catalog_backfill(session: Session = Depends(session_scope)) -> Catal
     """
     JobQueue(session).enqueue(job_type=FETCH_CATALOG_METADATA, payload={"after_id": None})
     return CatalogBackfillResponse(enqueued=True)
+
+
+class LLMCallCostResponse(BaseModel):
+    id: str
+    call_site: str
+    provider: str | None
+    model: str
+    prompt_version_id: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+    cost_usd: float | None
+    """``None`` means unpriceable — an unrecognized (provider, model) pair,
+    or a pre-migration row with no provider recorded. Never silently
+    ``0.0``."""
+    created_at: str
+
+
+class ModelCostResponse(BaseModel):
+    provider: str | None
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    unknown_cost_call_count: int
+
+
+class CallSiteCostResponse(BaseModel):
+    call_site: str
+    calls: int
+    cost_usd: float
+    unknown_cost_call_count: int
+
+
+class CostViewResponse(BaseModel):
+    total_calls: int
+    total_cost_usd: float
+    total_unknown_cost_call_count: int
+    by_model: list[ModelCostResponse]
+    by_call_site: list[CallSiteCostResponse]
+    recent_calls: list[LLMCallCostResponse]
+
+
+@router.get(
+    "/costs",
+    response_model=CostViewResponse,
+    dependencies=[Depends(require_drain_secret)],
+)
+def get_costs(session: Session = Depends(session_scope)) -> CostViewResponse:
+    """Per-request token accounting and an aggregate cost view (M7 session
+    1, `docs/milestones.md`) — LLM spend only, see the module docstring.
+    `recent_calls` is capped (`services.cost_view.RECENT_CALLS_LIMIT`); the
+    totals and per-model/per-call-site breakdowns are not.
+    """
+    view = get_cost_view(session)
+    return CostViewResponse(
+        total_calls=view.total_calls,
+        total_cost_usd=view.total_cost_usd,
+        total_unknown_cost_call_count=view.total_unknown_cost_call_count,
+        by_model=[
+            ModelCostResponse(
+                provider=m.provider,
+                model=m.model,
+                calls=m.calls,
+                input_tokens=m.input_tokens,
+                output_tokens=m.output_tokens,
+                cost_usd=m.cost_usd,
+                unknown_cost_call_count=m.unknown_cost_call_count,
+            )
+            for m in view.by_model
+        ],
+        by_call_site=[
+            CallSiteCostResponse(
+                call_site=c.call_site,
+                calls=c.calls,
+                cost_usd=c.cost_usd,
+                unknown_cost_call_count=c.unknown_cost_call_count,
+            )
+            for c in view.by_call_site
+        ],
+        recent_calls=[
+            LLMCallCostResponse(
+                id=str(c.id),
+                call_site=c.call_site,
+                provider=c.provider,
+                model=c.model,
+                prompt_version_id=c.prompt_version_id,
+                input_tokens=c.input_tokens,
+                output_tokens=c.output_tokens,
+                latency_ms=c.latency_ms,
+                cost_usd=c.cost_usd,
+                created_at=c.created_at.isoformat(),
+            )
+            for c in view.recent_calls
+        ],
+    )

@@ -49,9 +49,17 @@ def _call_site() -> str:
 class InstrumentedLLMProvider:
     """Implements ``LLMProvider`` by delegating to another one and recording
     every call. Wraps, doesn't replace — the inner provider still does the
-    actual work."""
+    actual work.
+
+    ``provider_kind`` (M7 session 1) is the resolved kind
+    (``"fake"``/``"anthropic"``/``"ollama"``) — known at
+    ``get_llm_provider()``'s call site but otherwise invisible to this
+    wrapper, which only ever sees the already-constructed inner provider.
+    Recorded onto every ``llm_calls`` row so ``domain/llm_cost.py`` can
+    price a call by vendor, not by guessing from the model string."""
 
     inner: LLMProvider
+    provider_kind: str
 
     @property
     def model(self) -> str:
@@ -80,6 +88,7 @@ class InstrumentedLLMProvider:
         with get_session_factory()() as session:
             LLMCallRepository(session).create(
                 call_site=call_site,
+                provider=self.provider_kind,
                 prompt_version_id=completion.prompt_version_id,
                 model=completion.model,
                 input_tokens=completion.input_tokens,
