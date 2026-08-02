@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from alam.api.dependencies import require_owner_session
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
 from alam.services.recommendations import (
@@ -25,7 +26,11 @@ from alam.services.recommendations import (
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/recommendations", tags=["recommendations"])
+router = APIRouter(
+    prefix="/recommendations",
+    tags=["recommendations"],
+    dependencies=[Depends(require_owner_session)],
+)
 
 
 class ClaimResponse(BaseModel):

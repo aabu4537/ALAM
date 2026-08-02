@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from alam.api.dependencies import reader_context_dependency
+from alam.api.dependencies import reader_context_dependency, require_owner_session
 from alam.domain.catalog_metadata import catalog_entry
 from alam.domain.structure_review import DesiredUnit, StructurePlanError
 from alam.media.books.epub import EpubParseError
@@ -75,7 +75,7 @@ if TYPE_CHECKING:
     from alam.media.books.epub import ParsedEpub
     from alam.persistence.models import MediaItem, MediaStructureUnit
 
-router = APIRouter(prefix="/books", tags=["books"])
+router = APIRouter(prefix="/books", tags=["books"], dependencies=[Depends(require_owner_session)])
 
 OWNER_DISPLAY_NAME = "Owner"
 

@@ -32,6 +32,7 @@ from fastapi.testclient import TestClient
 from alam.ai.extraction.memories import ExtractedMemory
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
 from alam.ai.providers.fakes import FakeLLM
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.eval.models import SpoilerCaseResult, SpoilerEvalReport
 from alam.persistence.repositories import (
@@ -123,6 +124,7 @@ def run_journey_summary_spoiler_eval(session: Session) -> SpoilerEvalReport:
 
     app = create_app()
     app.dependency_overrides[session_scope] = _session_override
+    app.dependency_overrides[require_owner_session] = lambda: None
     try:
         with (
             patch("alam.services.journey_summary.get_llm_provider", return_value=fake_llm),

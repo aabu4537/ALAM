@@ -1,9 +1,11 @@
 """Preference profile read endpoints (ADR-0001, M4 session 3).
 
 No caller-supplied user id, same as ``books.py`` and ``captures.py`` —
-``UserRepository.get_owner()`` resolves the single owner account, which is
-what keeps the real profile unreachable by anyone who can't already reach
-every other owner-scoped endpoint (CLAUDE.md rule 9).
+``UserRepository.get_owner()`` resolves the single owner account
+(CLAUDE.md rule 9). Router-level ``require_owner_session`` (M7 session 2,
+ADR-0017) is what actually keeps the real profile unreachable by an
+unauthenticated caller; the single-owner resolution above only keeps it
+separate from demo data, not private on its own.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from alam.api.dependencies import require_owner_session
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
 from alam.services.taste_drift import get_taste_drift
@@ -20,7 +23,9 @@ from alam.services.taste_drift import get_taste_drift
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/preferences", tags=["preferences"])
+router = APIRouter(
+    prefix="/preferences", tags=["preferences"], dependencies=[Depends(require_owner_session)]
+)
 
 
 class TasteDriftEntryResponse(BaseModel):

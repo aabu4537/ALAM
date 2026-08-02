@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 # content, or no content at all, without a ReaderContext.
 EXEMPTIONS: dict[tuple[str, str], str] = {
     ("GET", "/health"): "no media content — an ops liveness check",
+    ("POST", "/auth/login"): (
+        "no media content — issues a session cookie, not a read (M7 session 2, ADR-0017)"
+    ),
+    ("POST", "/auth/logout"): "no media content — clears a session cookie, not a read",
     ("POST", "/internal/jobs/drain"): (
         "internal, secret-gated job-queue trigger (ADR-0007) — not reader-facing"
     ),

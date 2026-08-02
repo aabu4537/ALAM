@@ -13,6 +13,7 @@ from fastapi import FastAPI
 
 from alam.api.middleware import TraceIDMiddleware
 from alam.api.routers import (
+    auth,
     books,
     captures,
     demo,
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(TraceIDMiddleware)
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(internal.router)
     app.include_router(imports.router)
     app.include_router(books.router)

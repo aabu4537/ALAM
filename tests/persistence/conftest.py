@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.persistence.session import session_scope
 from tests.conftest import REQUIRE_DB_TESTS_ENV, TEST_DATABASE_URL_ENV
@@ -107,13 +108,23 @@ def client(session: Session) -> Iterator[TestClient]:
     rolled-back session rather than opening a second, uncoordinated one
     against the real engine — the standard way to exercise a route's actual
     HTTP path (validation, dependency wiring, response serialization) while
-    keeping the same transactional isolation every other DB test gets."""
+    keeping the same transactional isolation every other DB test gets.
+
+    ``require_owner_session`` (M7 session 2, ADR-0017) is also overridden
+    to a no-op here, same reasoning as the top-level ``tests/conftest.py``
+    fixture of the same name: this fixture exists to make every *other*
+    owner-scoped test convenient, not to re-test the auth gate on every
+    call site. The gate itself is tested directly in
+    ``tests/persistence/test_owner_session_gating.py``, which builds its
+    own client without this override.
+    """
 
     def _session_override() -> Iterator[Session]:
         yield session
 
     app = create_app()
     app.dependency_overrides[session_scope] = _session_override
+    app.dependency_overrides[require_owner_session] = lambda: None
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

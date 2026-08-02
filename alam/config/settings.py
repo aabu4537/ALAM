@@ -105,6 +105,24 @@ class Settings(BaseSettings):
     default as the drain secret.
     """
 
+    owner_password: SecretStr | None = None
+    """Shared password gating every owner-scoped route (M7 session 2,
+    ADR-0017) — a single-owner personal system doesn't need a full
+    accounts system, just something that isn't wide open to the public
+    internet. Also the HMAC signing key for session tokens
+    (``auth/tokens.py``) — one secret to configure, not two; an HMAC key
+    only needs to be secret, not independently random. Same fail-closed
+    default as ``drain_secret``: unset means every owner-scoped route
+    refuses all callers rather than accepting them.
+    """
+
+    session_ttl_days: int = Field(default=30, ge=1)
+    """How long a session cookie stays valid after ``POST /auth/login``.
+    Long-lived on purpose — this is Alam's own personal app, not a
+    banking session, and there is no accounts system to revoke a single
+    compromised session from short of rotating ``owner_password`` itself.
+    """
+
     embedding_backfill_batch_size: int = Field(default=50, ge=1)
     """Memories processed per backfill job invocation (ADR-0008). Bounds one
     invocation's work so it fits comfortably inside a single drain, not the

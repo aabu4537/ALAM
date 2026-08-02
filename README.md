@@ -307,18 +307,23 @@ Everything below is a real endpoint on the live URL, not a plan.
 | `GET /books/{id}/reading-sessions/active` | The book's current session — chapter, ordinal, normalized progress (ADR-0004). |
 | `POST /books/{id}/reading-sessions/{id}/end` | Marks a session `completed` or `abandoned` — a DNF is a preference signal, never deleted. |
 | `GET /demo/books` | Public, no auth. The seeded demo persona's library — see the status note above. |
+| `POST /auth/login` / `/logout` | Shared-password session gate for every owner-scoped route below (M7 session 2, ADR-0017) — `HttpOnly`, `SameSite=Lax` signed cookie, no accounts system. |
 | `GET /preferences/taste-drift` | Every preference lineage, oldest fact to newest, current decayed confidence on the active entry (ADR-0001). Empty until the consolidation job has run. |
 | `GET /books/{id}/predictions` | Every prediction extracted from this book's reflections, oldest first — pending or confirmed/refuted/unresolvable, with the evidence memories that settled it, masked back to pending until the resolution window closes relative to the reader's own position (M5, ADR-0009; ADR-0012). |
 | `GET /books/{id}/journey-summary` | A short narrative of the reader's journey through this book so far, generated on demand from their own memories and predictions and cached until stale. Checked against everything the ordinal filter excluded before it's ever returned (M6 session 1, ADR-0002 Layers 2–3, ADR-0013). A generation the check flags is never served — 503, not the leaked draft. |
 | `GET /recommendations` | The reader's own to-read shelf, filtered to what best matches their recorded taste — every claim cites a specific `preference_fact`/`memory` id, or (once a candidate is catalog-backfilled) its own real `catalog` entry, displayed text copied from that record, never written by the model (M6 sessions 2–3, ADR-0014, ADR-0015). A citation that doesn't check out blocks the whole set — 503, never a partial response. |
 | `GET /books/{id}/briefing` | A spoiler-safe orientation for a book the reader hasn't started — refuses (409) once an active reading session exists. The candidate's own cached catalog blurb/subjects as a teaser, plus citations to the reader's own facts/memories from other books; the model never writes about the candidate's content itself (M6 session 4, ADR-0016). |
-| `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate`, `/internal/catalog/backfill` | Ops-only, bearer-secret protected. |
+| `POST /internal/jobs/drain`, `/internal/demo/seed`, `/internal/embeddings/backfill`, `/internal/preferences/consolidate`, `/internal/catalog/backfill`, `GET /internal/costs` | Ops-only, bearer-secret protected. |
 
 Submitting a capture enqueues three chained jobs — transcribe, correct, extract
 — each independently retryable on the M0 queue rather than one long request.
 
-No frontend calls these yet; they're driven by `curl`/tests today and will get
-a PWA in M7.
+Every route above except `/health`, `/demo/books`, `/auth/*`, and
+`/internal/*` now requires a valid owner session — `require_owner_session`
+is applied router-wide, enforced structurally by
+`tests/test_owner_session_coverage.py` (M7 session 2, ADR-0017). No
+frontend calls these yet; they're driven by `curl`/tests today and will
+get a PWA in M7, now that there's an auth gate worth pointing one at.
 
 ---
 
