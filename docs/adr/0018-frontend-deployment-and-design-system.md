@@ -36,6 +36,15 @@ forgotten in `vercel.json` fails a test rather than 404ing in production,
 same idiom `tests/test_reader_context_coverage.py` and
 `tests/test_owner_session_coverage.py` already established.
 
+`vercel.json` also carries `"framework": "nextjs"` explicitly. The Vercel
+project's Framework Preset was still "Other" from when it served only
+`api/index.py` — auto-detection doesn't override an already-set preset —
+and without this key the platform looked for a static `public/` output
+directory after the Next.js build finished, rather than invoking Next's
+own deployment adapter. Found the first time this branch actually
+deployed: the local build and every local proxy test passed while the
+real Vercel build failed outright on this exact point.
+
 No FastAPI route path changed, so `/internal/jobs/drain` keeps resolving
 exactly where Supabase's `pg_cron` already calls it (ADR-0007) — nothing
 external breaks.
