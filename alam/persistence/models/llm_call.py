@@ -26,6 +26,16 @@ class LLMCall(Base, UUIDPrimaryKeyMixin):
     from the call stack inside the instrumenting wrapper — not passed in by
     the caller. See ``ai/providers/instrumentation.py``."""
 
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    """The resolved provider kind (``"fake"``/``"anthropic"``/``"ollama"``),
+    set by ``get_llm_provider()`` at resolution time and threaded through
+    ``InstrumentedLLMProvider`` (M7 session 1). Nullable — no row written
+    before this column existed recorded one, and there is nothing to
+    backfill it from after the fact. Needed because ``model`` alone doesn't
+    say which vendor served it (``ollama_model`` is free-text, not a fixed
+    enum), which the cost view (``domain/llm_cost.py``) needs to price a
+    call correctly rather than guess from the model string."""
+
     prompt_version_id: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
 

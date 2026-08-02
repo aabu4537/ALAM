@@ -86,7 +86,7 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
         allowed=settings.allow_paid_providers,
     )
     if settings.llm_provider == "fake":
-        return InstrumentedLLMProvider(FakeLLM())
+        return InstrumentedLLMProvider(FakeLLM(), provider_kind="fake")
     if settings.llm_provider == "anthropic":
         # Imported here, not at module level, so importing this package —
         # which every test does, including TestNoNetwork — never pulls in
@@ -98,13 +98,15 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
             AnthropicLLM(
                 api_key=settings.anthropic_api_key.get_secret_value(),
                 model=settings.anthropic_model,
-            )
+            ),
+            provider_kind="anthropic",
         )
     if settings.llm_provider == "ollama":
         from alam.ai.providers.local.ollama_llm import OllamaLLM
 
         return InstrumentedLLMProvider(
-            OllamaLLM(base_url=settings.ollama_base_url, model=settings.ollama_model)
+            OllamaLLM(base_url=settings.ollama_base_url, model=settings.ollama_model),
+            provider_kind="ollama",
         )
     raise ValueError(f"unknown llm provider: {settings.llm_provider!r}")
 

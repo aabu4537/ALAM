@@ -1,5 +1,6 @@
-"""Auth on the drain and demo-seed endpoints. No database — a rejected request
-never reaches either the queue or the demo seeding logic."""
+"""Auth on the drain, demo-seed, and other internal endpoints. No database —
+a rejected request never reaches the queue, the demo seeding logic, or (for
+the read-only costs endpoint) the database at all."""
 
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ EMBEDDING_BACKFILL = "/internal/embeddings/backfill"
 CONSOLIDATION_TRIGGER = "/internal/preferences/consolidate"
 
 CATALOG_BACKFILL = "/internal/catalog/backfill"
+
+COSTS = "/internal/costs"
 
 
 @pytest.fixture
@@ -233,6 +236,38 @@ def test_catalog_backfill_demo_seed_secret_does_not_also_work(
     `session` fixture in tests/persistence/test_catalog_backfill.py."""
     response = both_secrets_client.post(
         CATALOG_BACKFILL, headers={"Authorization": f"Bearer {DEMO_SEED_SECRET}"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_costs_unconfigured_secret_refuses_rather_than_opens(client: TestClient) -> None:
+    """Reuses require_drain_secret, so an unset secret fails closed the same
+    way the drain endpoint does — even though this route only reads."""
+    response = client.get(COSTS)
+
+    assert response.status_code == 503
+
+
+def test_costs_missing_credentials_are_rejected(secured_client: TestClient) -> None:
+    assert secured_client.get(COSTS).status_code == 401
+
+
+def test_costs_wrong_secret_is_rejected(secured_client: TestClient) -> None:
+    response = secured_client.get(COSTS, headers={"Authorization": "Bearer wrong"})
+
+    assert response.status_code == 401
+
+
+def test_costs_demo_seed_secret_does_not_also_work(both_secrets_client: TestClient) -> None:
+    """Shares drain_secret, not demo_seed_secret, same reasoning as every
+    other endpoint in this file. No 200-path test here for the same reason
+    the write endpoints don't have one — get_cost_view is exercised
+    directly against the `session` fixture in
+    tests/persistence/test_cost_view_service.py, and the response shape
+    against tests/persistence/test_internal_costs_endpoint.py."""
+    response = both_secrets_client.get(
+        COSTS, headers={"Authorization": f"Bearer {DEMO_SEED_SECRET}"}
     )
 
     assert response.status_code == 401

@@ -23,23 +23,28 @@ spoiler-safe insights, prediction resolutions, and recommendations.
 
 ## Current milestone
 
-**M6 — Synthesis.** M0 through M5 are complete, plus two pieces of work done
-ahead of M6 rather than as part of it: real (paid, $0-gated, and local)
-providers with `llm_calls` instrumentation, and a `ReaderContext` hardening
-pass that closed spoiler-containment gaps in `/structure` and `/predictions`
-(ADR-0002 amendment, ADR-0012).
+**M7 — Polish.** M0 through M6 are complete. `docs/milestones.md`'s M7
+definition of done has three items: frontend, observability (per-request
+token accounting + a cost view), and a README rewrite with real eval
+numbers and an honest limitations section.
 
-M6 was explicitly scoped down at its start, 2026-08-01, per
-`docs/milestones/M6-open-questions.md`: no agent (`docs/milestones.md`'s
-own invitation to reconsider rule 4 was declined directly, not by
-default — see that rule below), `media/base.py` stays deferred, no
-memory deletion/edit path. `content_chunks` / raw book text stays declined
-per ADR-0010; M6 reads `media_items.attributes`, `memories`,
-`preference_facts`, and `predictions` only.
+**Session 1 (2026-08-01) built the observability item, LLM-only** — a
+scope decision made directly with the user, not a default:
+`get_embedding_provider()`/`get_stt_provider()` have no equivalent
+instrumentation to `llm_calls`, so a Voyage embedding call or an OpenAI
+Whisper transcription (both real spend under a paid provider) are
+invisible to `GET /internal/costs` and to `domain/llm_cost.py`'s pricing
+table. A known, documented gap — see that module's docstring — not a
+silent one; embeddings/STT instrumentation is its own future session if
+complete spend accounting is wanted.
 
-Nothing outside the M6 definition of done in `docs/milestones.md` should be
-implemented. If a task seems to require a later milestone's code, stop and say
-so rather than building it.
+Frontend has not been started — the user asked to be told before design
+work on it begins. The README rewrite depends on running the eval
+harnesses against a real (not fake) provider, which is itself unstarted.
+
+Nothing outside the M7 definition of done in `docs/milestones.md` should be
+implemented. If a task seems to require work this doc doesn't name, stop
+and say so rather than building it.
 
 ---
 
@@ -99,7 +104,8 @@ whole system is in this repo; its presence is not permission to implement it.
 - `media/base.py` / `MediaProvider` Protocol (deferred for M6 —
   `docs/milestones/M6-open-questions.md` question 1)
 - Memory deletion or edit path (deferred for M6 — same doc, question 5)
-- Frontend beyond a health page (M7)
+- Frontend beyond a health page — M7's own item, not started yet; wait for
+  an explicit go-ahead before beginning design
 - Any media type other than books
 - Caching layers, rate limiting, read replicas, sharding
 

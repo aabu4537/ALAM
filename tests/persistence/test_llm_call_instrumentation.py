@@ -73,6 +73,7 @@ class TestInstrumentedLLMProvider:
         assert row.input_tokens == result.input_tokens
         assert row.output_tokens == result.output_tokens
         assert row.latency_ms >= 0
+        assert row.provider == "fake"
 
     def test_the_completion_is_still_returned_to_the_caller(self, session: Session) -> None:
         """Instrumentation observes the call; it must not change what the

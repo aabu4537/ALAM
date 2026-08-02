@@ -42,6 +42,10 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
     ("POST", "/internal/catalog/backfill"): (
         "internal, secret-gated — enqueues jobs, returns no content (M6 session 3)"
     ),
+    ("GET", "/internal/costs"): (
+        "internal, secret-gated — LLM spend/token accounting, not media "
+        "content or reader position (M7 session 1)"
+    ),
     ("POST", "/imports/goodreads/preview"): (
         "library metadata diff (ratings, shelves) — not ordinal-scoped book content"
     ),
