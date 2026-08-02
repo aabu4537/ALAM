@@ -6,7 +6,10 @@ exact same eval harness CI runs against FakeLLM
 (tests/test_eval_extraction.py, tests/persistence/test_eval_retrieval.py,
 tests/persistence/test_eval_spoiler.py) but against real local providers
 (Ollama, sentence-transformers) — something the test suite itself can never
-do (rule 8: zero network calls in tests).
+do (rule 8: zero network calls in tests). Also runs journey_summary_eval
+with the same real LLM, closing the one gap the M5.5a run left open: a
+real, not canned, synthesis_leakage_rate for Layer 3
+(alam/ai/synthesis/leak_check.py).
 
 Usage:
     ALAM_TEST_DATABASE_URL=postgresql+psycopg://alam:alam@localhost:5432/alam_test \
@@ -38,15 +41,17 @@ os.environ.setdefault(
 )
 os.environ.setdefault("ALAM_LOG_FORMAT", "console")
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from alam.ai.providers import get_llm_provider
 from alam.config.settings import get_settings
 from alam.eval.extraction_eval import EXTRACTION_CASES, run_extraction_eval
+from alam.eval.journey_summary_eval import run_journey_summary_spoiler_eval
 from alam.eval.retrieval_eval import run_retrieval_eval
 from alam.eval.spoiler_eval import run_spoiler_eval
 from alam.persistence import session as session_module
 from alam.persistence.models.llm_call import LLMCall
+from alam.persistence.models.user import User
 
 
 def main() -> None:
@@ -99,6 +104,31 @@ def main() -> None:
     for sr in spoiler_report.results:
         marker = "LEAKED" if sr.leaked else "clean "
         print(f"  [{marker}] {sr.label}: {sr.leaked_labels}")
+    print()
+
+    print("=== journey summary (Layer 3) ===")
+    # Unlike the sections above, this one goes through the real HTTP path
+    # (reader_context_dependency -> UserRepository.get_owner()), which
+    # assumes exactly one non-demo user. Each pytest run gets that for free
+    # via per-test transaction rollback (tests/persistence/conftest.py); this
+    # script commits after every section against one shared connection, so
+    # the extraction/retrieval/spoiler owners above are still there unless
+    # cleared first. Cascades (ondelete="CASCADE" on media_items.user_id)
+    # take their seeded books/sessions/memories with them — safe, since
+    # those sections' reports were already printed above.
+    with session_factory() as session:
+        session.execute(delete(User).where(User.is_demo.is_(False)))
+        session.commit()
+
+    with session_factory() as session:
+        t0 = time.perf_counter()
+        journey_report = run_journey_summary_spoiler_eval(session, llm=llm)
+        elapsed = time.perf_counter() - t0
+        session.commit()
+    print(f"leakage_rate={journey_report.leakage_rate:.3f} elapsed={elapsed:.1f}s")
+    for jr in journey_report.results:
+        marker = "LEAKED" if jr.leaked else "clean "
+        print(f"  [{marker}] {jr.label}: {jr.leaked_labels}")
     print()
 
     print("=== llm_calls recorded this run ===")

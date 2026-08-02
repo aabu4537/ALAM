@@ -109,12 +109,18 @@ ever persisted or returned (Layer 3,
 [`alam/ai/synthesis/leak_check.py`](alam/ai/synthesis/leak_check.py)),
 with its own adversarial case,
 **`synthesis_leakage_rate`** ([`alam/eval/journey_summary_eval.py`](alam/eval/journey_summary_eval.py),
-also enforced in CI). Unlike the 0.0 above, this number is not yet a real
-quality signal — the fake LLM provider this deployment runs has no actual
-judgment about what constitutes a spoiler, so the harness supplies a canned
-clean verdict to exercise the plumbing rather than to measure anything.
-It will be revisited, and likely get worse before it gets better, once a
-real provider backs Layer 3 (see [ADR-0013](docs/adr/0013-synthesis-artifacts-and-layer3.md)).
+also enforced in CI, against the fake LLM this deployment runs — a canned
+clean verdict, exercising the plumbing rather than measuring anything). The
+same harness, re-run against a real local model
+(`llama3.2:3b` via Ollama), **measured 0.0 for real for the first time**:
+the model's own leak-check verdict on its own narrative came back clean,
+and the defense-in-depth substring check (the excluded reveal's distinctive
+phrasing checked against the draft actually persisted, regardless of what
+Layer 3 says) also found nothing
+([`docs/eval/baseline-local-providers.md`](docs/eval/baseline-local-providers.md)).
+One clean case is not an adversarial clearance — see that doc for the
+honest caveat — but it is the first real, model-backed signal Layer 3 has
+had (see [ADR-0013](docs/adr/0013-synthesis-artifacts-and-layer3.md)).
 
 `GET /recommendations` (M6 session 2) doesn't reuse Layer 3 — recommendations
 are library-wide with no reader ordinal, so there is no excluded-content set

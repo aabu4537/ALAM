@@ -183,6 +183,17 @@ plain check on the draft that was actually persisted and returned, so it
 would catch a canned response that accidentally echoed spoiler text even
 under `FakeLLM`.
 
+Amendment, M7 (2026-08-02): `run_journey_summary_spoiler_eval` gained an
+optional real `llm` parameter (default unchanged — still `FakeLLM` for
+CI) and was run once against `llama3.2:3b` via Ollama, producing a real
+`layer3_verdict_clean=0.0` for the first time on its one adversarial
+case — full writeup in
+[`docs/eval/baseline-local-providers.md`](../eval/baseline-local-providers.md).
+The "not real under `FakeLLM`" caveat above still describes the deployed
+instance (Vercel stays on fakes, per that same doc's "Dev-environment
+only" section) and still describes CI; it no longer describes every run
+of this harness.
+
 ## Consequences
 
 **Positive.** One artifact lifecycle and one staleness *shape*, reused by

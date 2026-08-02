@@ -103,3 +103,76 @@ semantic miscategorization or mild hallucination on transcripts with a
 less clear-cut single category. That gap is a property of `llama3.2:3b`,
 not of the pipeline; no paid, frontier-scale model has been run against
 this harness to compare against.
+
+---
+
+## Journey summary (Layer 3 leak-check) — first real run, 2026-08-02
+
+**LLM:** Ollama, `llama3.2:3b` (unchanged from above; re-run alongside
+extraction/retrieval/spoiler in the same `scripts/run_local_eval.py`
+invocation).
+**Prompt versions measured:** `journey-summary-v1` (narrative generation)
+and `leak-check-v1` (Layer 3 verdict) — `alam/ai/prompts/`.
+**What changed to make this possible:** `run_journey_summary_spoiler_eval`
+(`alam/eval/journey_summary_eval.py`) previously always constructed its
+own `FakeLLM` regardless of `ALAM_LLM_PROVIDER`; it now takes an optional
+`llm` parameter, defaulting to the same fake for the CI/test-suite path
+(`tests/persistence/test_eval_spoiler.py`, unaffected) but routing both
+calls through a real provider when one is passed. This is the one eval
+harness that reaches Layer 3 (`alam/ai/synthesis/leak_check.py`) rather
+than exercising its own canned-clean plumbing — the gap
+[ADR-0013](../adr/0013-synthesis-artifacts-and-layer3.md) and this
+project's README both explicitly flagged as still-fake.
+
+**A second, unrelated bug surfaced running this against a shared local
+database:** `scripts/run_local_eval.py` runs all four evals against one
+committed session, but `reader_context_dependency` resolves "the owner"
+via `UserRepository.get_owner()` — the earliest-created non-demo user.
+Under `pytest`, every test gets its own rolled-back transaction so this
+is never ambiguous; here, the extraction/retrieval/spoiler sections above
+each leave their own "Eval Owner" row behind, and the journey-summary
+section's book belonged to a *different*, later-created owner — a 404,
+not a leak, but a real test-isolation bug the script didn't have before
+this section existed. Fixed by clearing non-demo `users` (cascading to
+their books/sessions/memories via `ondelete="CASCADE"`) immediately
+before the journey-summary section runs, once the earlier sections'
+reports have already been printed.
+
+**Case:** one book, a visible memory at ordinal 1 ("I loved the opening
+chapters on Arrakis"), a spoiler-shaped memory at ordinal 9 (a
+distinctive, book-ending reveal phrase), reader repositioned to ordinal
+3 — the reveal sits well past the reader's current position and must
+never appear in the generated narrative.
+
+**Result: `synthesis_leakage_rate = 0.000` (0/2), both real for the first
+time.** `layer3_verdict_clean` — the model's own leak-check verdict on
+its own narrative — came back `{"leaked": false, "spans": []}`.
+`distinctive_language_not_in_draft` — the defense-in-depth substring
+check, real regardless of what Layer 3 says — also passed: the reveal
+phrase does not appear in the persisted draft.
+
+**The generated narrative, verbatim** (`journey_summaries.draft`):
+
+> The reader has enjoyed the opening chapters of 'Eval Book', finding them
+> engaging. They have yet to make any predictions about the book's
+> content.
+
+Two `llm_calls` rows: the narrative generation (208 input / 37 output
+tokens, 5.7s) and the Layer 3 leak-check itself (235 input / 13 output
+tokens, 3.4s) — both well inside the 25s `ALAM_DRAIN_BUDGET_SECONDS` and
+120s `ALAM_JOB_LEASE_SECONDS` defaults, unlike the archived 1B run's
+runaway-generation failures (this endpoint runs synchronously in-request,
+not through the job queue, but the latency headroom is the same
+comparison point).
+
+**This is one clean case, not a clearance.** The spoiler content here is
+a single, unambiguous, distinctively-worded reveal at a fixed ordinal
+distance — not an adversarial set built to find where a 3B model's
+judgment breaks. ADR-0002's ~200-case target applies to Layer 1's memory
+retrieval set; Layer 3 has exactly one case, here run for the first time
+against a real model instead of canned data. A model correctly declining
+to volunteer information it wasn't asked about is a much lower bar than a
+model correctly refusing to leak when a reader's own reflection nudges
+toward a spoiler-adjacent topic. Read this result as "the plumbing now
+produces a real, model-backed verdict, and this one case passes," not as
+"Layer 3 is proven robust."

@@ -9,17 +9,19 @@ surface that *generates* prose rather than retrieving existing records, so
 it is the first case that actually exercises Layer 3
 (``ai/synthesis/leak_check.py``) rather than Layer 1 alone.
 
-**Not a real quality signal while ``ALAM_LLM_PROVIDER=fake``** — same
-caveat ``extraction_eval.py`` documents. ``FakeLLM`` has no real judgment;
-this harness supplies a canned, schema-valid narrative and a canned, clean
-Layer 3 verdict so the plumbing (seeding, ordinal exclusion, prompt
-assembly, the persisted row, the endpoint's response) is exercised end to
-end. ``distinctive_language_not_in_draft`` is real regardless of which
-provider is behind ``FakeLLM``, though: it is a plain substring check on the
-draft actually persisted and returned, defense-in-depth on the Layer 3
-verdict itself — even a compromised or misconfigured Layer 3 canned
-response could not silently mask spoiler text making it all the way into a
-served draft.
+**Not a real quality signal by default (``llm=None``)** — same caveat
+``extraction_eval.py`` documents. ``FakeLLM`` has no real judgment; the
+default canned, schema-valid narrative and canned, clean Layer 3 verdict
+only exercise the plumbing (seeding, ordinal exclusion, prompt assembly,
+the persisted row, the endpoint's response) end to end. Passing a real
+``llm`` (as ``scripts/run_local_eval.py`` does) routes both calls — the
+narrative and the Layer 3 leak check — through it instead, producing a
+real ``layer3_verdict_clean`` signal for the first time.
+``distinctive_language_not_in_draft`` is real regardless of which provider
+is behind it, though: it is a plain substring check on the draft actually
+persisted and returned, defense-in-depth on the Layer 3 verdict itself —
+even a compromised or misconfigured Layer 3 verdict could not silently
+mask spoiler text making it all the way into a served draft.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session
 
+    from alam.ai.providers.llm import LLMProvider
     from alam.persistence.models import MediaItem
 
 _DISTINCTIVE_SPOILER_PHRASE = "the emperor abdicates the throne to Paul at the novel's end"
@@ -86,7 +89,9 @@ def _memory_at(session: Session, book: MediaItem, *, ordinal: int, content: str)
     )
 
 
-def run_journey_summary_spoiler_eval(session: Session) -> SpoilerEvalReport:
+def run_journey_summary_spoiler_eval(
+    session: Session, *, llm: LLMProvider | None = None
+) -> SpoilerEvalReport:
     """One book, a visible memory at ordinal 1, a spoiler-shaped memory at
     ordinal 9 (a major reveal, excluded by the ordinal filter once the
     active session is repositioned to ordinal 3 — mid-book, well short of
@@ -94,13 +99,18 @@ def run_journey_summary_spoiler_eval(session: Session) -> SpoilerEvalReport:
     checks:
 
     - ``layer3_verdict_clean``: the persisted Layer 3 result is
-      ``leaked=False`` — the canned verdict this harness supplies, real
-      only once a real LLM provider backs Layer 3 (see the module
-      docstring).
+      ``leaked=False``. Real only when ``llm`` is a real provider — with
+      the default ``llm=None``, this is the canned verdict this harness
+      supplies (see the module docstring).
     - ``distinctive_language_not_in_draft``: defense-in-depth on the check
       above — the spoiler memory's own distinctive phrase must not appear
       verbatim in the draft actually returned, regardless of what Layer 3
       said.
+
+    ``llm``: defaults to a ``FakeLLM`` queued with a canned clean
+    narrative and a canned clean leak-check verdict (the CI/test-suite
+    path, rule 8 — no network calls). Pass a real provider to route both
+    calls through it instead (``scripts/run_local_eval.py``'s path).
     """
     owner = UserRepository(session).create(display_name="Eval Owner")
     book = MediaItemRepository(session).create(user_id=owner.id, title="Eval Book")
@@ -117,7 +127,9 @@ def run_journey_summary_spoiler_eval(session: Session) -> SpoilerEvalReport:
         book.id, structure_unit_id=reposition_unit.id, ordinal=3, progress=0.3
     )
 
-    fake_llm = FakeLLM(responses=[_CLEAN_NARRATIVE, _CLEAN_LEAK_VERDICT])
+    provider = (
+        llm if llm is not None else FakeLLM(responses=[_CLEAN_NARRATIVE, _CLEAN_LEAK_VERDICT])
+    )
 
     def _session_override() -> Iterator[Session]:
         yield session
@@ -127,7 +139,7 @@ def run_journey_summary_spoiler_eval(session: Session) -> SpoilerEvalReport:
     app.dependency_overrides[require_owner_session] = lambda: None
     try:
         with (
-            patch("alam.services.journey_summary.get_llm_provider", return_value=fake_llm),
+            patch("alam.services.journey_summary.get_llm_provider", return_value=provider),
             TestClient(app) as client,
         ):
             response = client.get(f"/books/{book.id}/journey-summary")
