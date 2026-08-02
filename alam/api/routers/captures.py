@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from alam.ai.retrieval.hybrid import DEFAULT_LIMIT, retrieve_memories
-from alam.api.dependencies import reader_context_dependency
+from alam.api.dependencies import reader_context_dependency, require_owner_session
 from alam.domain.spoiler_filter import is_visible
 from alam.persistence.models.reading_session import ReadingSessionStatus
 from alam.persistence.repositories.captures import CaptureRepository
@@ -52,7 +52,11 @@ if TYPE_CHECKING:
     from alam.domain.reader_context import ReaderContext
     from alam.persistence.models import Capture, Memory, ReadingSession
 
-router = APIRouter(prefix="/books/{media_item_id}", tags=["captures"])
+router = APIRouter(
+    prefix="/books/{media_item_id}",
+    tags=["captures"],
+    dependencies=[Depends(require_owner_session)],
+)
 
 EndStatus = Literal["completed", "abandoned"]
 

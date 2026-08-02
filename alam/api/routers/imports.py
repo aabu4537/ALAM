@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
+from alam.api.dependencies import require_owner_session
 from alam.domain.goodreads import GoodreadsCSVError, ImportDiff
 from alam.persistence.repositories.users import UserRepository
 from alam.persistence.session import session_scope
@@ -27,7 +28,11 @@ from alam.services.goodreads_import import commit_import, preview_import
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/imports/goodreads", tags=["imports"])
+router = APIRouter(
+    prefix="/imports/goodreads",
+    tags=["imports"],
+    dependencies=[Depends(require_owner_session)],
+)
 
 OWNER_DISPLAY_NAME = "Owner"
 

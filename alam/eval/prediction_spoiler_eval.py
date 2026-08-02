@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from alam.ai.extraction.memories import ExtractedMemory
 from alam.ai.extraction.memories import MemoryType as ExtractedMemoryType
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.eval.models import SpoilerCaseResult, SpoilerEvalReport
 from alam.persistence.models.prediction import PredictionStatus
@@ -160,6 +161,7 @@ def run_prediction_reread_spoiler_eval(session: Session) -> SpoilerEvalReport:
 
     app = create_app()
     app.dependency_overrides[session_scope] = _session_override
+    app.dependency_overrides[require_owner_session] = lambda: None
     try:
         with TestClient(app) as client:
             response = client.get(f"/books/{book.id}/predictions")

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 from fastapi.testclient import TestClient
 
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.config.settings import Settings, get_settings
 
@@ -55,5 +56,17 @@ def _isolate_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    with TestClient(create_app()) as c:
+    """``require_owner_session`` (M7 session 2, ADR-0017) is overridden to a
+    no-op here — this fixture exists to test everything *other than* the
+    auth gate itself conveniently, the same reason it already stands up a
+    plain app rather than requiring every caller to configure one. The
+    gate's own behavior is tested directly: ``tests/test_auth_router.py``
+    (login/logout) and ``tests/test_owner_session_gating.py``
+    (previously-open routes now require a real session) both build their
+    own ``TestClient`` without this override.
+    """
+    app = create_app()
+    app.dependency_overrides[require_owner_session] = lambda: None
+    with TestClient(app) as c:
         yield c
+    app.dependency_overrides.clear()

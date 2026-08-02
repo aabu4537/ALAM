@@ -40,6 +40,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from alam.ai.providers.fakes import FakeLLM
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.eval.models import GroundednessCaseResult, RecommendationGroundednessReport
 from alam.persistence.repositories import (
@@ -64,6 +65,7 @@ def _run_through_endpoint(session: Session, fake_llm: FakeLLM) -> None:
 
     app = create_app()
     app.dependency_overrides[session_scope] = _session_override
+    app.dependency_overrides[require_owner_session] = lambda: None
     try:
         with (
             patch("alam.services.recommendations.get_llm_provider", return_value=fake_llm),

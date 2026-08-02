@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from fastapi.testclient import TestClient
 
 from alam.ai.retrieval.hybrid import retrieve_memories
+from alam.api.dependencies import require_owner_session
 from alam.api.main import create_app
 from alam.domain.reader_context import ReaderContext
 from alam.domain.spoiler_filter import is_visible
@@ -190,6 +191,7 @@ def run_spoiler_eval_via_endpoint(
 
     app = create_app()
     app.dependency_overrides[session_scope] = _session_override
+    app.dependency_overrides[require_owner_session] = lambda: None
     owner_id = UserRepository(session).create(display_name="Eval Owner").id
 
     results = []

@@ -36,6 +36,14 @@ def test_allow_paid_providers_defaults_to_false() -> None:
     assert Settings().allow_paid_providers is False
 
 
+def test_owner_password_defaults_to_unset() -> None:
+    """Fail-closed by default (M7 session 2, ADR-0017), same reasoning as
+    ``allow_paid_providers`` — a future edit accidentally hardcoding a
+    default password breaks this loudly rather than quietly opening every
+    owner-scoped route."""
+    assert Settings().owner_password is None
+
+
 def test_env_prefix_is_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALAM_ENV", "production")
     monkeypatch.setenv("ALAM_JOB_MAX_ATTEMPTS", "9")
